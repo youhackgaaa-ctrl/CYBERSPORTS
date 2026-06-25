@@ -16,6 +16,7 @@ import {
   Users
 } from "lucide-react";
 import Hls from "hls.js";
+import shaka from "shaka-player";
 import { StreamItem } from "../types";
 
 interface PlayerProps {
@@ -23,6 +24,7 @@ interface PlayerProps {
   onRemove: () => void;
   isFocused: boolean;
   onFocus: () => void;
+  key?: React.Key;
 }
 
 function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
@@ -34,8 +36,27 @@ function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
     const video = videoRef.current;
     if (!video || !stream.streamUrl) return;
 
-    if (Hls.isSupported()) {
-      const hls = new Hls();
+    let hls: Hls | null = null;
+    let shakaPlayer: shaka.Player | null = null;
+    const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
+
+    if (isDashUrl) {
+      shaka.polyfill.installAll();
+      if (shaka.Player.isBrowserSupported()) {
+        shakaPlayer = new shaka.Player(video);
+        shakaPlayer.addEventListener('error', (event: any) => {
+          console.error('Shaka Error', event.detail);
+          setError("DASH Connection Failed");
+        });
+        shakaPlayer.load(stream.streamUrl).then(() => {
+          video.play().catch(e => console.log("Autoplay blocked", e));
+        }).catch(e => {
+          console.error("Shaka Load Error", e);
+          setError("Stream Load Failed");
+        });
+      }
+    } else if (Hls.isSupported()) {
+      hls = new Hls();
       hls.loadSource(stream.streamUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -46,10 +67,14 @@ function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
           setError("Stream Connection Failed");
         }
       });
-      return () => hls.destroy();
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = stream.streamUrl;
     }
+
+    return () => {
+      if (hls) hls.destroy();
+      if (shakaPlayer) shakaPlayer.destroy();
+    };
   }, [stream.streamUrl]);
 
   return (

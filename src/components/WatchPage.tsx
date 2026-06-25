@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Hls from "hls.js";
+import shaka from "shaka-player";
 import { 
   Heart, 
   Share2, 
@@ -90,7 +91,9 @@ function getEmbedInfo(url: string): { type: "youtube" | "twitch" | "facebook" | 
     lowercase.includes(".webm?") || 
     lowercase.includes(".ogg?") || 
     lowercase.includes(".m3u8?") || 
+    lowercase.includes(".mpd?") ||
     lowercase.includes("m3u8") ||
+    lowercase.includes("mpd") ||
     lowercase.includes("commondatastorage.googleapis.com") ||
     lowercase.includes("/video-file") ||
     lowercase.includes("stream.mp4");
@@ -260,9 +263,31 @@ export default function WatchPage({
     if (!video) return;
 
     let hls: Hls | null = null;
+    let shakaPlayer: shaka.Player | null = null;
     const isHlsUrl = stream.streamUrl.toLowerCase().includes("m3u8");
+    const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
 
-    if (isHlsUrl) {
+    if (isDashUrl) {
+      // DASH support via Shaka Player
+      shaka.polyfill.installAll();
+      if (shaka.Player.isBrowserSupported()) {
+        shakaPlayer = new shaka.Player(video);
+        
+        shakaPlayer.addEventListener('error', (event: any) => {
+          console.error('Shaka Player Error', event.detail);
+        });
+
+        shakaPlayer.load(stream.streamUrl).then(() => {
+          video.play().catch((err) => {
+            console.warn("Shaka Autoplay failed:", err);
+          });
+        }).catch((err) => {
+          console.error("Shaka load failed:", err);
+        });
+      } else {
+        console.error("Browser does not support DASH playback");
+      }
+    } else if (isHlsUrl) {
       if (Hls.isSupported()) {
         hls = new Hls({
           maxMaxBufferLength: 10,
@@ -316,6 +341,9 @@ export default function WatchPage({
     return () => {
       if (hls) {
         hls.destroy();
+      }
+      if (shakaPlayer) {
+        shakaPlayer.destroy();
       }
       // Reset video src when stream changes or component unmounts
       video.removeAttribute("src");

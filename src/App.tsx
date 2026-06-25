@@ -417,7 +417,7 @@ export default function App() {
                           {streams.length} Total nodes detected in other sectors
                         </p>
                         <button 
-                          onClick={() => setSelectedCategory("All Sports")}
+                          onClick={() => setActiveCategory("All Sports")}
                           className="px-4 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan font-mono text-[10px] rounded-lg hover:bg-neon-cyan/20 transition-all uppercase tracking-wider"
                         >
                           View All Sports Feed
@@ -497,6 +497,7 @@ export default function App() {
                   onResetDefaults={handleResetDefaults}
                   categories={categories}
                   setCategories={setCategories}
+                  onClose={() => setCurrentView({ type: "dashboard" })}
                 />
               </motion.div>
             )}
