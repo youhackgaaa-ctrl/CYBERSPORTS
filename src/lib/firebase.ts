@@ -1,5 +1,11 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { 
+  getFirestore, 
+  enableMultiTabIndexedDbPersistence, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDviJUsNOfYIM-4yfKqsGB2GKQoxFfdzOA",
@@ -11,4 +17,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, "ai-studio-13428611-0a73-4207-be9f-e8c6e3431b4c");
+
+// Initialize Firestore with settings for better reliability on slow networks
+// Using persistentLocalCache is the modern way to enable persistence in v9+
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  }),
+  ignoreUndefinedProperties: true,
+}, "ai-studio-13428611-0a73-4207-be9f-e8c6e3431b4c");

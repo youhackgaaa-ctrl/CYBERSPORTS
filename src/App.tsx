@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Trophy, HelpCircle, AlertCircle, Sparkles, FilterX } from "lucide-react";
+import { Trophy, HelpCircle, AlertCircle, Sparkles, FilterX, RotateCcw } from "lucide-react";
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, writeBatch, setDoc } from "firebase/firestore";
 import { db } from "./lib/firebase";
 
@@ -56,11 +56,13 @@ export default function App() {
   const [categories, setCategories] = useState<string[]>(["Football", "Cricket", "Basketball", "TV Channel"]);
 
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "failed">("connecting");
 
   // Sync streams from Firestore
   useEffect(() => {
-    const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
-    
+    let unsubscribe: (() => void) | null = null;
+    let fallbackUnsubscribe: (() => void) | null = null;
+
     const handleSnapshot = (snapshot: any) => {
       const streamsData: StreamItem[] = [];
       snapshot.forEach((doc: any) => {
@@ -70,20 +72,31 @@ export default function App() {
       setStreams(streamsData);
       setLoading(false);
       setError(null);
+      setConnectionStatus("connected");
     };
 
-    const unsubscribe = onSnapshot(q, handleSnapshot, (error) => {
-      console.error("Firestore streams error (ordered):", error);
-      // Fallback: try without ordering if index is missing
-      const qSimple = query(collection(db, "streams"));
-      onSnapshot(qSimple, handleSnapshot, (err) => {
-        console.error("Firestore streams error (simple):", err);
-        setError(`Connection failed: ${err.message}`);
-        setLoading(false);
+    const startListening = () => {
+      const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
+      
+      unsubscribe = onSnapshot(q, handleSnapshot, (err) => {
+        console.error("Firestore streams error (ordered):", err);
+        // If index is missing or permissions error, try simple query
+        const qSimple = query(collection(db, "streams"));
+        fallbackUnsubscribe = onSnapshot(qSimple, handleSnapshot, (fallbackErr) => {
+          console.error("Firestore streams error (simple):", fallbackErr);
+          setError(`Matrix Link Failure: ${fallbackErr.message}`);
+          setConnectionStatus("failed");
+          setLoading(false);
+        });
       });
-    });
+    };
 
-    return () => unsubscribe();
+    startListening();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (fallbackUnsubscribe) fallbackUnsubscribe();
+    };
   }, []);
 
   // Sync categories from Firestore
@@ -286,6 +299,45 @@ export default function App() {
                       </span>
                     )}
                     <span>GRID_COUNT: <span className="text-white">{filteredStreams.length}</span></span>
+                  </div>
+                </div>
+
+                {/* Connection Status & Refresh */}
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1E2230]/40 border border-[#1E2230] backdrop-blur-sm">
+                      <div className={`w-2 h-2 rounded-full ${
+                        connectionStatus === "connected" ? "bg-neon-green shadow-[0_0_8px_#39FF14]" : 
+                        connectionStatus === "connecting" ? "bg-amber-500 animate-pulse" : "bg-red-500"
+                      }`} />
+                      <span className="font-mono text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        {connectionStatus === "connected" ? "LINK_ACTIVE" : 
+                         connectionStatus === "connecting" ? "SYNCHRONIZING..." : "LINK_LOST"}
+                      </span>
+                    </div>
+                    {connectionStatus === "failed" && (
+                      <button 
+                        onClick={() => window.location.reload()}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 font-mono text-[10px] font-bold hover:bg-red-500/20 transition-all"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        RE-ESTABLISH LINK
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="hidden md:flex flex-col items-end mr-2">
+                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-tighter">Network Latency</span>
+                      <span className="font-mono text-[11px] text-neon-cyan font-bold tracking-widest">0.42ms_OPTIC</span>
+                    </div>
+                    <button 
+                      onClick={() => window.location.reload()}
+                      className="p-2.5 rounded-xl bg-[#1E2230]/40 border border-[#1E2230] text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/30 transition-all group"
+                      title="Refresh Stream Grid"
+                    >
+                      <RotateCcw className="w-4 h-4 group-active:rotate-180 transition-transform duration-500" />
+                    </button>
                   </div>
                 </div>
 
