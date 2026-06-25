@@ -6,6 +6,8 @@
 import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Trophy, HelpCircle, AlertCircle, Sparkles, FilterX } from "lucide-react";
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc, writeBatch } from "firebase/firestore";
+import { db } from "./lib/firebase";
 
 import { StreamItem } from "./types";
 import { INITIAL_STREAMS } from "./mockData";
@@ -18,20 +20,11 @@ import WatchPage from "./components/WatchPage";
 import AdminPanel from "./components/AdminPanel";
 
 export default function App() {
-  // Streams State (Backed by localStorage)
-  const [streams, setStreams] = useState<StreamItem[]>(() => {
-    const saved = localStorage.getItem("cyber_streams");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error reading saved streams", e);
-      }
-    }
-    return INITIAL_STREAMS;
-  });
+  // Streams State (Now backed by Firestore)
+  const [streams, setStreams] = useState<StreamItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Favorites State (Backed by localStorage)
+  // Favorites State (Kept in localStorage as it's user-specific)
   const [favorites, setFavorites] = useState<string[]>(() => {
     const saved = localStorage.getItem("cyber_favorites");
     if (saved) {
@@ -59,23 +52,37 @@ export default function App() {
   // Mobile sidebar open state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
-  // Dynamic categories state (backed by localStorage)
-  const [categories, setCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem("cyber_categories");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error reading saved categories", e);
-      }
-    }
-    return ["Football", "Cricket", "Basketball", "TV Channel"];
-  });
+  // Dynamic categories state (Now backed by Firestore)
+  const [categories, setCategories] = useState<string[]>([]);
 
-  // Sync streams state to localStorage
+  // Sync streams from Firestore
   useEffect(() => {
-    localStorage.setItem("cyber_streams", JSON.stringify(streams));
-  }, [streams]);
+    const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const streamsData: StreamItem[] = [];
+      snapshot.forEach((doc) => {
+        streamsData.push({ id: doc.id, ...doc.data() } as StreamItem);
+      });
+      setStreams(streamsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync categories from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "settings", "categories"), (doc) => {
+      if (doc.exists()) {
+        setCategories(doc.data().list || []);
+      } else {
+        // Initialize if not exists
+        setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Sync favorites state to localStorage
   useEffect(() => {
@@ -105,11 +112,32 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Reset to default mock streams
-  const handleResetDefaults = () => {
-    setStreams(INITIAL_STREAMS);
-    setFavorites([]);
-    setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
+  // Reset to default mock streams (Admin Only logic)
+  const handleResetDefaults = async () => {
+    if (!window.confirm("Are you sure you want to reset all streams to defaults? This will affect all users.")) return;
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete all current streams
+      streams.forEach((s) => {
+        batch.delete(doc(db, "streams", s.id));
+      });
+      
+      // Add initial streams
+      INITIAL_STREAMS.forEach((s) => {
+        const newDocRef = doc(collection(db, "streams"));
+        batch.set(newDocRef, {
+          ...s,
+          createdAt: new Date()
+        });
+      });
+      
+      await batch.commit();
+      setFavorites([]);
+    } catch (error) {
+      console.error("Error resetting defaults:", error);
+    }
   };
 
   // Core Category Filtering Logic

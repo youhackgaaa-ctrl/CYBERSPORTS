@@ -1,0 +1,15 @@
+{
+  "collections": {
+    "streams": {
+      "id": "string",
+      "title": "string",
+      "category": "string",
+      "thumbnail": "string",
+      "viewers": "string",
+      "status": "string",
+      "streamUrl": "string",
+      "type": "string",
+      "createdAt": "timestamp"
+    }
+  }
+}

@@ -26,6 +26,8 @@ import {
   Clock,
   Settings
 } from "lucide-react";
+import { collection, addDoc, updateDoc, doc, deleteDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import { StreamItem } from "../types";
 
 interface AdminPanelProps {
@@ -74,7 +76,7 @@ export default function AdminPanel({
   const [editingCatIdx, setEditingCatIdx] = useState<number | null>(null);
   const [editingCatValue, setEditingCatValue] = useState("");
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newCatName.trim();
     if (!name) return;
@@ -82,9 +84,16 @@ export default function AdminPanel({
       showToast("❌ ERROR: Category already exists!");
       return;
     }
-    setCategories((prev) => [...prev, name]);
-    setNewCatName("");
-    showToast(`❇️ SUCCESS: "${name}" registered as dynamic category.`);
+    
+    try {
+      const newList = [...categories, name];
+      await setDoc(doc(db, "settings", "categories"), { list: newList });
+      setNewCatName("");
+      showToast(`❇️ SUCCESS: "${name}" registered as dynamic category.`);
+    } catch (error) {
+      console.error("Error adding category:", error);
+      showToast("❌ ERROR: Failed to save category.");
+    }
   };
 
   const handleStartEditCategory = (index: number) => {
@@ -92,7 +101,7 @@ export default function AdminPanel({
     setEditingCatValue(categories[index]);
   };
 
-  const handleSaveCategory = (index: number) => {
+  const handleSaveCategory = async (index: number) => {
     const originalName = categories[index];
     const newName = editingCatValue.trim();
     if (!newName) return;
@@ -101,24 +110,47 @@ export default function AdminPanel({
       return;
     }
     
-    // Update category list
-    setCategories((prev) => prev.map((c, i) => (i === index ? newName : c)));
-    // Update all streams matching originalName to newName
-    setStreams((prev) => prev.map((s) => s.category === originalName ? { ...s, category: newName } : s));
-    
-    setEditingCatIdx(null);
-    setEditingCatValue("");
-    showToast(`⚡ SUCCESS: Renamed category to "${newName}".`);
+    try {
+      const newList = categories.map((c, i) => (i === index ? newName : c));
+      await setDoc(doc(db, "settings", "categories"), { list: newList });
+      
+      // Update all streams matching originalName to newName
+      // This is a bit complex for a client-side update but we'll do it for the streams we have in memory
+      // Ideally this would be a server-side task or a batch update
+      const updates = streams
+        .filter((s) => s.category === originalName)
+        .map((s) => updateDoc(doc(db, "streams", s.id), { category: newName }));
+      
+      await Promise.all(updates);
+      
+      setEditingCatIdx(null);
+      setEditingCatValue("");
+      showToast(`⚡ SUCCESS: Renamed category to "${newName}".`);
+    } catch (error) {
+      console.error("Error saving category:", error);
+      showToast("❌ ERROR: Failed to update category.");
+    }
   };
 
-  const handleDeleteCategory = (index: number) => {
+  const handleDeleteCategory = async (index: number) => {
     const nameToDelete = categories[index];
-    // Remove category
-    setCategories((prev) => prev.filter((_, i) => i !== index));
-    // Re-assign streams of deleted category to Uncategorized
-    setStreams((prev) => prev.map((s) => s.category === nameToDelete ? { ...s, category: "Uncategorized" } : s));
     
-    showToast(`🔥 DELETED: Category "${nameToDelete}" removed.`);
+    try {
+      const newList = categories.filter((_, i) => i !== index);
+      await setDoc(doc(db, "settings", "categories"), { list: newList });
+      
+      // Re-assign streams of deleted category to Uncategorized
+      const updates = streams
+        .filter((s) => s.category === nameToDelete)
+        .map((s) => updateDoc(doc(db, "streams", s.id), { category: "Uncategorized" }));
+      
+      await Promise.all(updates);
+      
+      showToast(`🔥 DELETED: Category "${nameToDelete}" removed.`);
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      showToast("❌ ERROR: Failed to delete category.");
+    }
   };
 
   const bannerPresets: Record<string, string> = {
@@ -193,7 +225,7 @@ export default function AdminPanel({
   };
 
   // Submit stream form
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.title.trim() || !formData.streamUrl.trim()) {
@@ -201,8 +233,6 @@ export default function AdminPanel({
       return;
     }
 
-    const submissionId = isEditing ? formData.id : `stream-${Date.now()}`;
-    
     const defaultLogoMap: Record<string, string> = {
       "Football": "⚽",
       "Cricket": "🏏",
@@ -212,14 +242,13 @@ export default function AdminPanel({
     const defaultLogo = defaultLogoMap[formData.category] || "🏆";
 
     // Construct stream model
-    const newStream: StreamItem = {
-      id: submissionId,
+    const streamData: any = {
       title: formData.title,
       category: formData.category,
       status: formData.status,
       streamUrl: formData.streamUrl,
       viewers: formData.status === "Upcoming" ? 0 : formData.viewers,
-      startTime: formData.status === "Upcoming" && formData.startTime ? formData.startTime : undefined,
+      startTime: formData.status === "Upcoming" && formData.startTime ? formData.startTime : null,
       bannerUrl: formData.bannerUrl || "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=1200",
       description: formData.description || `Live stream event for the ${formData.category} series. Broadcasters synchronized.`,
       showInAllSports: formData.showInAllSports,
@@ -228,7 +257,7 @@ export default function AdminPanel({
 
     // Add team details if not TV Channel
     if (formData.category !== "TV Channel") {
-      newStream.teams = {
+      streamData.teams = {
         home: {
           name: formData.homeName || "Home Force",
           logo: formData.homeLogo || "⚡",
@@ -242,15 +271,22 @@ export default function AdminPanel({
       };
     }
 
-    if (isEditing) {
-      setStreams((prev) => prev.map((item) => (item.id === submissionId ? newStream : item)));
-      showToast("⚡ SUCCESS: Stream matrix packet updated in real-time!");
-    } else {
-      setStreams((prev) => [newStream, ...prev]);
-      showToast("❇️ SUCCESS: New stream registered into the node grid!");
+    try {
+      if (isEditing) {
+        await updateDoc(doc(db, "streams", formData.id), streamData);
+        showToast("⚡ SUCCESS: Stream matrix packet updated in real-time!");
+      } else {
+        await addDoc(collection(db, "streams"), {
+          ...streamData,
+          createdAt: serverTimestamp()
+        });
+        showToast("❇️ SUCCESS: New stream registered into the node grid!");
+      }
+      handleResetForm();
+    } catch (error) {
+      console.error("Error saving stream:", error);
+      showToast("❌ ERROR: Failed to save stream node.");
     }
-
-    handleResetForm();
   };
 
   // Populate form to edit
@@ -278,9 +314,14 @@ export default function AdminPanel({
   };
 
   // Delete stream
-  const handleDeleteClick = (id: string) => {
-    setStreams((prev) => prev.filter((item) => item.id !== id));
-    showToast("🔥 REMOVED: Stream node disconnected and deleted.");
+  const handleDeleteClick = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "streams", id));
+      showToast("🔥 REMOVED: Stream node disconnected and deleted.");
+    } catch (error) {
+      console.error("Error deleting stream:", error);
+      showToast("❌ ERROR: Failed to remove stream node.");
+    }
   };
 
   const handleResetForm = () => {
@@ -307,95 +348,102 @@ export default function AdminPanel({
   };
 
   // Adjust score for team
-  const handleAdjustScore = (id: string, team: "home" | "away", delta: number) => {
-    setStreams((prev) =>
-      prev.map((stream) => {
-        if (stream.id === id && stream.teams) {
-          const currentHome = stream.teams.home.score;
-          const currentAway = stream.teams.away.score;
-          const homeScore = team === "home" ? Math.max(0, currentHome + delta) : currentHome;
-          const awayScore = team === "away" ? Math.max(0, currentAway + delta) : currentAway;
-          
-          showToast(`⚡ Score Adjusted: ${stream.teams.home.name} ${homeScore} - ${awayScore} ${stream.teams.away.name}`);
-          
-          return {
-            ...stream,
-            teams: {
-              ...stream.teams,
-              home: { ...stream.teams.home, score: homeScore },
-              away: { ...stream.teams.away, score: awayScore },
-            },
-          };
-        }
-        return stream;
-      })
-    );
+  const handleAdjustScore = async (id: string, team: "home" | "away", delta: number) => {
+    const stream = streams.find(s => s.id === id);
+    if (!stream || !stream.teams) return;
+
+    const currentHome = stream.teams.home.score;
+    const currentAway = stream.teams.away.score;
+    const homeScore = team === "home" ? Math.max(0, currentHome + delta) : currentHome;
+    const awayScore = team === "away" ? Math.max(0, currentAway + delta) : currentAway;
+
+    try {
+      await updateDoc(doc(db, "streams", id), {
+        "teams.home.score": homeScore,
+        "teams.away.score": awayScore
+      });
+      showToast(`⚡ Score Adjusted: ${stream.teams.home.name} ${homeScore} - ${awayScore} ${stream.teams.away.name}`);
+    } catch (error) {
+      console.error("Error adjusting score:", error);
+      showToast("❌ ERROR: Failed to update score.");
+    }
   };
 
   // Toggle Live/Upcoming Status directly
-  const handleToggleStatus = (id: string) => {
-    setStreams((prev) =>
-      prev.map((stream) => {
-        if (stream.id === id) {
-          const nextStatus = stream.status === "Live" ? "Upcoming" : "Live";
-          const nextViewers = nextStatus === "Live" ? Math.floor(Math.random() * 20000) + 8000 : 0;
-          showToast(`📡 Node Status set to: ${nextStatus.toUpperCase()}`);
-          return {
-            ...stream,
-            status: nextStatus,
-            viewers: nextViewers,
-          };
-        }
-        return stream;
-      })
-    );
+  const handleToggleStatus = async (id: string) => {
+    const stream = streams.find(s => s.id === id);
+    if (!stream) return;
+
+    const nextStatus = stream.status === "Live" ? "Upcoming" : "Live";
+    const nextViewers = nextStatus === "Live" ? Math.floor(Math.random() * 20000) + 8000 : 0;
+
+    try {
+      await updateDoc(doc(db, "streams", id), {
+        status: nextStatus,
+        viewers: nextViewers
+      });
+      showToast(`📡 Node Status set to: ${nextStatus.toUpperCase()}`);
+    } catch (error) {
+      console.error("Error toggling status:", error);
+      showToast("❌ ERROR: Failed to update node status.");
+    }
   };
 
   // Toggle Featured Match of the Day pin
-  const handleToggleMatchOfTheDay = (id: string) => {
-    setStreams((prev) => {
-      const targetStream = prev.find((s) => s.id === id);
-      const isCurrentlyMOTD = targetStream?.isMatchOfTheDay;
-      const targetState = !isCurrentlyMOTD;
+  const handleToggleMatchOfTheDay = async (id: string) => {
+    const targetStream = streams.find((s) => s.id === id);
+    if (!targetStream) return;
+    const isCurrentlyMOTD = targetStream.isMatchOfTheDay;
+    const targetState = !isCurrentlyMOTD;
+
+    try {
+      // First, unpin all other MOTDs to ensure only one
+      const batch = streams
+        .filter((s) => s.isMatchOfTheDay && s.id !== id)
+        .map((s) => updateDoc(doc(db, "streams", s.id), { isMatchOfTheDay: false }));
       
+      await Promise.all([
+        ...batch,
+        updateDoc(doc(db, "streams", id), { isMatchOfTheDay: targetState })
+      ]);
+
       if (targetState) {
-        showToast(`🌟 FEATURED: Pinned "${targetStream?.title}" as Match of the Day!`);
+        showToast(`🌟 FEATURED: Pinned "${targetStream.title}" as Match of the Day!`);
       } else {
         showToast("⭐ Unpinned Match of the Day");
       }
-
-      return prev.map((stream) => ({
-        ...stream,
-        isMatchOfTheDay: stream.id === id ? targetState : false,
-      }));
-    });
+    } catch (error) {
+      console.error("Error toggling MOTD:", error);
+      showToast("❌ ERROR: Failed to update featured slot.");
+    }
   };
 
   // Toggle showInAllSports directly from table
-  const handleToggleShowInAllSports = (id: string) => {
-    setStreams((prev) =>
-      prev.map((stream) => {
-        if (stream.id === id) {
-          const nextState = stream.showInAllSports === true ? false : true;
-          showToast(
-            nextState 
-              ? `❇️ PINNED: "${stream.title}" visible on All Sports feed!` 
-              : `🚫 UNPINNED: "${stream.title}" removed from All Sports feed.`
-          );
-          return {
-            ...stream,
-            showInAllSports: nextState,
-          };
-        }
-        return stream;
-      })
-    );
+  const handleToggleShowInAllSports = async (id: string) => {
+    const stream = streams.find(s => s.id === id);
+    if (!stream) return;
+
+    const nextState = stream.showInAllSports !== true;
+
+    try {
+      await updateDoc(doc(db, "streams", id), {
+        showInAllSports: nextState
+      });
+      showToast(
+        nextState 
+          ? `❇️ PINNED: "${stream.title}" visible on All Sports feed!` 
+          : `🚫 UNPINNED: "${stream.title}" removed from All Sports feed.`
+      );
+    } catch (error) {
+      console.error("Error toggling pin:", error);
+      showToast("❌ ERROR: Failed to update feed pin.");
+    }
   };
 
   // Bulk test stream generator
-  const handleGenerateRandomMatch = () => {
-    const categories: ("Football" | "Cricket" | "Basketball")[] = ["Football", "Cricket", "Basketball"];
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+  const handleGenerateRandomMatch = async () => {
+    const cats: ("Football" | "Cricket" | "Basketball")[] = ["Football", "Cricket", "Basketball"];
+    const randomCategory = cats[Math.floor(Math.random() * cats.length)];
     
     const teamNames: Record<string, string[]> = {
       Football: ["Dhaka Cyber", "Madrid Alliance", "Nexus United", "Tokyo Force", "London Titans", "Berlin FC"],
@@ -425,8 +473,7 @@ export default function AdminPanel({
     const homeScore = Math.floor(Math.random() * 4);
     const awayScore = Math.floor(Math.random() * 4);
     
-    const newStream: StreamItem = {
-      id: `stream-gen-${Date.now()}`,
+    const streamData: any = {
       title: `${randomCategory} Clash: ${homeName} vs ${awayName}`,
       category: randomCategory,
       status: "Live",
@@ -437,11 +484,17 @@ export default function AdminPanel({
       teams: {
         home: { name: homeName, logo: homeLogo, score: homeScore },
         away: { name: awayName, logo: awayLogo, score: awayScore },
-      }
+      },
+      createdAt: serverTimestamp()
     };
 
-    setStreams((prev) => [newStream, ...prev]);
-    showToast(`🔥 GENERATED: ${newStream.title} is now LIVE!`);
+    try {
+      await addDoc(collection(db, "streams"), streamData);
+      showToast(`🔥 GENERATED: ${streamData.title} is now LIVE!`);
+    } catch (error) {
+      console.error("Error generating match:", error);
+      showToast("❌ ERROR: Failed to generate random match.");
+    }
   };
 
   // Get icons for sports category
