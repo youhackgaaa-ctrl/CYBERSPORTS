@@ -887,13 +887,13 @@ export default function AdminPanel({
                       />
                     </div>
                     <div className="col-span-1 space-y-1">
-                      <label className="font-mono text-[9px] text-gray-500">LOGO (emoji)</label>
+                      <label className="font-mono text-[9px] text-gray-500">LOGO (emoji or URL)</label>
                       <input
                         type="text"
                         name="homeLogo"
                         value={formData.homeLogo}
                         onChange={handleInputChange}
-                        placeholder="⚡"
+                        placeholder="⚡ or https://..."
                         className="w-full bg-[#12141C] border border-[#1E2230] text-center focus:border-neon-cyan rounded-lg px-2 py-1.5 text-xs text-white"
                       />
                     </div>
@@ -924,13 +924,13 @@ export default function AdminPanel({
                       />
                     </div>
                     <div className="col-span-1 space-y-1">
-                      <label className="font-mono text-[9px] text-gray-500">LOGO (emoji)</label>
+                      <label className="font-mono text-[9px] text-gray-500">LOGO (emoji or URL)</label>
                       <input
                         type="text"
                         name="awayLogo"
                         value={formData.awayLogo}
                         onChange={handleInputChange}
-                        placeholder="🪐"
+                        placeholder="🪐 or https://..."
                         className="w-full bg-[#12141C] border border-[#1E2230] text-center focus:border-neon-cyan rounded-lg px-2 py-1.5 text-xs text-white"
                       />
                     </div>

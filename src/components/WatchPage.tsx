@@ -129,13 +129,47 @@ interface WatchPageProps {
 }
 
 export default function WatchPage({
-  streamId,
+  streamId: initialStreamId,
   streams,
   favorites,
   onToggleFavorite,
   onBack,
 }: WatchPageProps) {
-  const stream = streams.find((s) => s.id === streamId);
+  const [activeId, setActiveId] = useState(initialStreamId);
+  const [customUrl, setCustomUrl] = useState("");
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customStreamData, setCustomStreamData] = useState<StreamItem | null>(null);
+
+  const stream = isCustomMode && customStreamData 
+    ? customStreamData 
+    : streams.find((s) => s.id === activeId);
+
+  const handleQuickSwitch = (id: string) => {
+    setActiveId(id);
+    setIsCustomMode(false);
+    setCustomStreamData(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePlayCustomUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customUrl.trim()) return;
+    
+    const newCustomStream: StreamItem = {
+      id: `custom-${Date.now()}`,
+      title: "User Custom Uplink",
+      streamUrl: customUrl,
+      category: "External",
+      status: "Live",
+      viewers: 1,
+      bannerUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=400",
+      description: "Direct connection to a user-provided stream source."
+    };
+    
+    setCustomStreamData(newCustomStream);
+    setIsCustomMode(true);
+    setError(null);
+  };
 
   if (!stream) {
     return (
@@ -269,72 +303,20 @@ export default function WatchPage({
     const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
 
     if (isDashUrl) {
-      // DASH support via Shaka Player
-      try {
-        (shaka as any).polyfill.installAll();
-        if ((shaka as any).Player.isBrowserSupported()) {
-          shakaPlayer = new (shaka as any).Player(video);
-          
-          // Advanced configuration for resilience
-          shakaPlayer.configure({
-            manifest: {
-              dash: {
-                ignoreDrmInfo: true,
-                autoCorrectDrift: true
-              }
-            },
-            streaming: {
-              bufferingGoal: 30,
-              rebufferingGoal: 15,
-              bufferBehind: 30,
-              ignoreTextStreamFailures: true,
-              alwaysStreamText: false,
-              retryParameters: {
-                maxAttempts: 3,
-                baseDelay: 1000,
-                backoffFactor: 2
-              }
-            }
-          });
-
-          shakaPlayer.addEventListener('error', (event: any) => {
-            const err = event.detail;
-            console.error('Shaka Player Error', err);
-            // Translate common Shaka errors to human readable ones
-            if (err.code === 6001 || err.code === 6007) {
-              setError("Encrypted Content Detected: This stream requires DRM keys which are not provided.");
-            } else if (err.code === 1001) {
-              setError("Network Error: Failed to fetch manifest (CORS or 404)");
-            } else {
-              setError(`Signal Interrupted [Code: ${err.code}]`);
-            }
-          });
-
-          shakaPlayer.load(stream.streamUrl).then(() => {
-            video.play().catch((err) => {
-              console.warn("Shaka Autoplay failed:", err);
-            });
-          }).catch((err) => {
-            console.error("Shaka load failed:", err);
-            if (err.code === 6001 || err.code === 6007) {
-              setError("Encrypted Content: Stream is DRM protected.");
-            } else {
-              setError(`Load Error: ${err.code || 'Link Invalid'}`);
-            }
-          });
-        } else {
-          setError("Platform Incompatible: DASH playback not supported.");
-        }
-      } catch (e) {
-        console.error("Shaka Init Failed", e);
-        setError("Player Initialization Failed");
-      }
+      setError("DASH Streams (.mpd) are no longer supported. Please use HLS (.m3u8) links.");
+      return;
     } else if (isHlsUrl) {
       if (Hls.isSupported()) {
         hls = new Hls({
-          maxMaxBufferLength: 10,
           enableWorker: true,
           lowLatencyMode: true,
+          backBufferLength: 60,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10,
+          manifestLoadingMaxRetry: 4,
+          levelLoadingMaxRetry: 4,
         });
         hls.loadSource(stream.streamUrl);
         hls.attachMedia(video);
@@ -391,7 +373,7 @@ export default function WatchPage({
       video.removeAttribute("src");
       video.load();
     };
-  }, [stream.streamUrl, streamId]);
+  }, [stream?.streamUrl, activeId]);
 
   const handlePlay = () => {
     setIsPlaying(true);
@@ -526,25 +508,28 @@ export default function WatchPage({
           <span className="hidden md:inline text-white">H.264 / AAC</span>
         </div>
       </div>
-
-      {/* Main Stream Screen Container - Centered / Full Width Layout */}
-      <div className="w-full">
+      <div className="w-full grid grid-cols-1 xl:grid-cols-4 gap-6">
         
-        {/* Video Player Screen Block */}
-        <div 
-          ref={playerContainerRef}
-          className={`w-full flex flex-col justify-between bg-black transition-all duration-300 ${
-            isLocalFullscreen 
-              ? "fixed inset-0 z-[9999] h-screen w-screen p-0" 
-              : "border border-[#1E2230] rounded-2xl overflow-hidden shadow-2xl bg-[#12141C]"
-          }`}
-        >
-          
-          {/* Video Player Display */}
-          <div className={`relative bg-black flex items-center justify-center group/video overflow-hidden ${
-            isLocalFullscreen ? "w-full h-full flex-1" : "aspect-video w-full"
-          }`}>
-            {stream.status !== "Live" && !timeLeft.isOver ? (
+        {/* Video Player Section (Left 3 cols on XL) */}
+        <div className="xl:col-span-3 space-y-6">
+          {/* Video Player Screen Block */}
+          <div 
+            ref={playerContainerRef}
+            className={`w-full flex flex-col justify-between bg-black transition-all duration-300 ${
+              isLocalFullscreen 
+                ? "fixed inset-0 z-[9999] h-screen w-screen p-0" 
+                : "border border-[#1E2230] rounded-2xl overflow-hidden shadow-2xl bg-[#12141C]"
+            }`}
+          >
+            
+            {/* Video Player Display */}
+            <div 
+              className={`relative bg-black flex items-center justify-center group/video overflow-hidden ${
+                isLocalFullscreen ? "w-full h-full flex-1" : "aspect-video w-full"
+              }`}
+              onClick={handlePlayPause}
+            >
+              {stream.status !== "Live" && !timeLeft.isOver ? (
               <div className="absolute inset-0 z-30 bg-[#07080B] flex flex-col items-center justify-center p-6 text-center">
                 <div className="absolute inset-0 opacity-5 bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none"></div>
                 <div className="relative z-10 space-y-6 max-w-lg">
@@ -612,7 +597,6 @@ export default function WatchPage({
             {error && (
               <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-6 text-center">
                 <ShieldAlert className="w-12 h-12 text-rose-500 mb-4 animate-pulse" />
-                <h3 className="font-display font-bold text-lg text-white mb-2 uppercase tracking-tight">Stream Signal Lost</h3>
                 <p className="text-gray-400 text-xs font-mono max-w-sm mb-6">{error}</p>
                 <button 
                   onClick={() => window.location.reload()}
@@ -633,6 +617,13 @@ export default function WatchPage({
               </span>
             </div>
 
+            {/* Play/Pause Overlay - Visible on Hover or when paused */}
+            <div className={`absolute inset-0 z-30 flex items-center justify-center bg-black/20 transition-opacity duration-300 ${!isPlaying ? "opacity-100" : "opacity-0 group-hover/video:opacity-100"}`}>
+              <div className="w-16 h-16 rounded-full bg-neon-cyan/80 text-black flex items-center justify-center shadow-[0_0_30px_#00D4FF] transform transition-transform group-hover/video:scale-110 active:scale-95">
+                {isPlaying ? <Pause className="w-8 h-8 fill-black" /> : <Play className="w-8 h-8 fill-black ml-1" />}
+              </div>
+            </div>
+
             {/* Exit Full Screen Button - Floating and visible in local fullscreen */}
             {isLocalFullscreen && (
               <button
@@ -649,6 +640,58 @@ export default function WatchPage({
           {/* Under-Player Controls / Info Bar */}
           {!isLocalFullscreen && (
             <div className="p-6 space-y-4">
+              {/* Match "VS" Display Banner - Visual representation for Football/Matches */}
+              {stream.teams && (
+                <div className="flex items-center justify-center gap-4 md:gap-10 py-5 px-6 bg-[#07080B]/60 backdrop-blur-xl border border-[#1E2230] rounded-2xl mb-8 shadow-[0_0_40px_rgba(0,0,0,0.4)] relative overflow-hidden group/vs">
+                  {/* Background grid accent */}
+                  <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+                  
+                  {/* Home Team */}
+                  <div className="flex flex-col items-center gap-2 group/team cursor-default z-10 flex-1">
+                    <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-[#12141C] border-2 border-neon-cyan/30 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(0,212,255,0.1)] group-hover/team:border-neon-cyan/60 transition-all duration-300 transform group-hover/team:scale-105">
+                      {stream.teams.home.logo.startsWith("http") ? (
+                        <img src={stream.teams.home.logo} alt="" className="w-10 h-10 md:w-12 md:h-12 object-contain" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-2xl md:text-4xl">{stream.teams.home.logo}</span>
+                      )}
+                    </div>
+                    <span className="font-display font-bold text-[10px] md:text-sm text-white uppercase tracking-wider group-hover/team:text-neon-cyan transition-colors text-center truncate w-full">
+                      {stream.teams.home.name}
+                    </span>
+                  </div>
+                  
+                  {/* Score / VS Center */}
+                  <div className="flex flex-col items-center gap-1 z-10 shrink-0">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className="font-mono text-3xl md:text-5xl font-black text-neon-cyan tracking-tighter italic drop-shadow-[0_0_10px_rgba(0,212,255,0.4)]">
+                        {stream.teams.home.score}
+                      </div>
+                      <div className="font-display font-black text-lg md:text-2xl text-gray-700 italic px-1">VS</div>
+                      <div className="font-mono text-3xl md:text-5xl font-black text-purple-400 tracking-tighter italic drop-shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                        {stream.teams.away.score}
+                      </div>
+                    </div>
+                    <div className="px-3 py-1 rounded-full bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan font-mono text-[9px] font-bold uppercase tracking-[0.2em] animate-pulse">
+                      Live Feed
+                    </div>
+                  </div>
+
+                  {/* Away Team */}
+                  <div className="flex flex-col items-center gap-2 group/team cursor-default z-10 flex-1">
+                    <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-[#12141C] border-2 border-purple-500/30 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.1)] group-hover/team:border-purple-500/60 transition-all duration-300 transform group-hover/team:scale-105">
+                      {stream.teams.away.logo.startsWith("http") ? (
+                        <img src={stream.teams.away.logo} alt="" className="w-10 h-10 md:w-12 md:h-12 object-contain" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-2xl md:text-4xl">{stream.teams.away.logo}</span>
+                      )}
+                    </div>
+                    <span className="font-display font-bold text-[10px] md:text-sm text-white uppercase tracking-wider group-hover/team:text-purple-400 transition-colors text-center truncate w-full">
+                      {stream.teams.away.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap">
@@ -748,7 +791,76 @@ export default function WatchPage({
           )}
 
         </div>
+      </div>
 
+      {/* Sidebar Switcher (Right Column on XL) */}
+        {!isLocalFullscreen && (
+          <div className="xl:col-span-1 space-y-6">
+            {/* Play Custom URL Panel */}
+            <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-5 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-4 h-4 text-neon-green" />
+                <h3 className="font-display font-bold text-sm text-white uppercase tracking-tight">Direct Link Uplink</h3>
+              </div>
+              <form onSubmit={handlePlayCustomUrl} className="space-y-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="Paste .m3u8 or video link..."
+                    className="w-full bg-[#07080B] border border-[#1E2230] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-neon-cyan/50 transition-all font-mono"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-neon-cyan text-black font-mono text-[10px] font-bold rounded-xl hover:bg-white transition-all uppercase tracking-widest"
+                >
+                  Switch to Custom
+                </button>
+              </form>
+              <p className="mt-3 text-[9px] text-gray-500 font-mono uppercase tracking-tighter leading-relaxed">
+                Enter any valid HLS stream link or direct video URL to override the current frequency.
+              </p>
+            </div>
+
+            {/* Quick Switch Arena Grid */}
+            <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-5 shadow-xl flex flex-col h-[500px]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-purple-400" />
+                  <h3 className="font-display font-bold text-sm text-white uppercase tracking-tight">Arena Switcher</h3>
+                </div>
+                <span className="font-mono text-[9px] text-neon-cyan">{streams.length} NODES</span>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+                {streams.filter(s => s.id !== activeId).map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleQuickSwitch(s.id)}
+                    className="w-full flex items-center gap-3 p-2 rounded-xl bg-[#07080B]/50 border border-[#1E2230] hover:border-neon-cyan/30 hover:bg-[#1E2230]/40 transition-all text-left group"
+                  >
+                    <div className="relative w-16 h-10 rounded-lg overflow-hidden shrink-0 border border-[#1E2230]">
+                      <img src={s.bannerUrl || s.logo} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                      {s.status === "Live" && (
+                        <div className="absolute top-1 left-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_5px_#ef4444]"></div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-sans font-bold text-[11px] text-gray-200 truncate group-hover:text-neon-cyan transition-colors">
+                        {s.title}
+                      </p>
+                      <p className="font-mono text-[9px] text-gray-500 uppercase truncate">
+                        {s.category} • {s.viewers.toLocaleString()} VIEWS
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

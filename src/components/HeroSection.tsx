@@ -45,15 +45,35 @@ export default function HeroSection({ match, onWatch }: HeroSectionProps) {
           
           {/* Real-time Score Overlay if live */}
           {match.status === "Live" && match.teams && (
-            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between p-3.5 bg-black/75 backdrop-blur-md rounded-xl border border-neon-cyan/20">
-              <div className="flex items-center gap-2">
-                <span className="font-sans font-bold text-xs text-white uppercase tracking-wider">{match.teams.home.name}</span>
-                <span className="font-mono font-bold text-sm text-neon-green">{match.teams.home.score}</span>
+            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between p-3 bg-black/85 backdrop-blur-md rounded-xl border border-neon-cyan/20 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#1E2230] flex items-center justify-center text-lg shadow-inner overflow-hidden shrink-0 border border-neon-cyan/10">
+                  {match.teams.home.logo.startsWith("http") ? (
+                    <img src={match.teams.home.logo} alt="" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span>{match.teams.home.logo}</span>
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-sans font-bold text-[10px] text-white uppercase tracking-wider truncate max-w-[80px]">{match.teams.home.name}</span>
+                  <span className="font-mono font-bold text-xs text-neon-green">{match.teams.home.score}</span>
+                </div>
               </div>
-              <div className="font-mono text-xs text-gray-500 font-bold px-2">VS</div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-sm text-neon-cyan">{match.teams.away.score}</span>
-                <span className="font-sans font-bold text-xs text-white uppercase tracking-wider">{match.teams.away.name}</span>
+
+              <div className="font-display font-black text-xs text-gray-700 italic px-2">VS</div>
+
+              <div className="flex items-center gap-3 text-right">
+                <div className="flex flex-col items-end">
+                  <span className="font-sans font-bold text-[10px] text-white uppercase tracking-wider truncate max-w-[80px]">{match.teams.away.name}</span>
+                  <span className="font-mono font-bold text-xs text-neon-cyan">{match.teams.away.score}</span>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-[#1E2230] flex items-center justify-center text-lg shadow-inner overflow-hidden shrink-0 border border-purple-500/10">
+                  {match.teams.away.logo.startsWith("http") ? (
+                    <img src={match.teams.away.logo} alt="" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span>{match.teams.away.logo}</span>
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -41,43 +41,18 @@ function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
     const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
 
     if (isDashUrl) {
-      try {
-        (shaka as any).polyfill.installAll();
-        if ((shaka as any).Player.isBrowserSupported()) {
-          shakaPlayer = new (shaka as any).Player(video);
-          
-          shakaPlayer.configure({
-            manifest: {
-              dash: { ignoreDrmInfo: true, autoCorrectDrift: true }
-            },
-            streaming: {
-              bufferingGoal: 10,
-              rebufferingGoal: 5,
-              ignoreTextStreamFailures: true
-            }
-          });
-
-          shakaPlayer.addEventListener('error', (event: any) => {
-            const err = event.detail;
-            console.error('Shaka Error', err);
-            setError(`DASH Error: ${err.code}`);
-          });
-          shakaPlayer.load(stream.streamUrl).then(() => {
-            video.play().catch((e: any) => console.log("Autoplay blocked", e));
-          }).catch((e: any) => {
-            console.error("Shaka Load Error", e);
-            if (e.code === 6001 || e.code === 6007) {
-              setError("Protected Stream");
-            } else {
-              setError("Uplink Failure");
-            }
-          });
-        }
-      } catch (e) {
-        setError("Init Error");
-      }
+      setError("MPD Not Supported");
+      return;
     } else if (Hls.isSupported()) {
-      hls = new Hls();
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 40,
+        liveSyncDurationCount: 3,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+      });
       hls.loadSource(stream.streamUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
