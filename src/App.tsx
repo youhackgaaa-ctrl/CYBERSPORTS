@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Trophy, HelpCircle, AlertCircle, Sparkles, FilterX } from "lucide-react";
-import { collection, onSnapshot, query, orderBy, doc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc, writeBatch, setDoc } from "firebase/firestore";
 import { db } from "./lib/firebase";
 
 import { StreamItem } from "./types";
@@ -72,12 +72,18 @@ export default function App() {
 
   // Sync categories from Firestore
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, "settings", "categories"), (doc) => {
-      if (doc.exists()) {
-        setCategories(doc.data().list || []);
+    const unsubscribe = onSnapshot(doc(db, "settings", "categories"), async (snapshot) => {
+      if (snapshot.exists()) {
+        setCategories(snapshot.data().list || []);
       } else {
-        // Initialize if not exists
-        setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
+        // Initialize if not exists in Firestore
+        const defaultCats = ["Football", "Cricket", "Basketball", "TV Channel"];
+        setCategories(defaultCats);
+        try {
+          await setDoc(doc(db, "settings", "categories"), { list: defaultCats });
+        } catch (e) {
+          console.error("Error initializing categories", e);
+        }
       }
     });
 
@@ -150,10 +156,9 @@ export default function App() {
     // Favorites category shows all streams favorited by the user
     filteredStreams = streams.filter((s) => favorites.includes(s.id));
   } else {
-    // Other categories (Football, Cricket, Basketball, TV Channel, etc.) show unpinned items in that category
-    filteredStreams = streams.filter(
-      (s) => s.category === activeCategory && s.showInAllSports !== true
-    );
+    // Other categories (Football, Cricket, Basketball, TV Channel, etc.)
+    // Show all items in that category
+    filteredStreams = streams.filter((s) => s.category === activeCategory);
   }
 
   // Real-time Search Filter overlay
@@ -204,9 +209,20 @@ export default function App() {
 
         {/* 3. Screen Views with animated transition effects */}
         <main className="flex-1 p-4 lg:p-8">
-          <AnimatePresence mode="wait">
-            
-            {/* VIEW A: DASHBOARD VIEW */}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center min-h-[50vh]">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-neon-cyan/20 border-t-neon-cyan rounded-full animate-spin"></div>
+                <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-b-neon-green/30 rounded-full animate-spin [animation-duration:1.5s]"></div>
+              </div>
+              <p className="mt-4 font-mono text-[10px] text-neon-cyan uppercase tracking-widest animate-pulse">
+                Establishing Stream Node Connection...
+              </p>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              
+              {/* VIEW A: DASHBOARD VIEW */}
             {currentView.type === "dashboard" && (
               <motion.div
                 key="dashboard-view"
@@ -337,7 +353,8 @@ export default function App() {
             )}
 
           </AnimatePresence>
-        </main>
+        )}
+      </main>
 
         {/* Footer info brand bar */}
         <footer className="py-6 px-8 border-t border-[#1E2230] bg-[#07080B] flex flex-col sm:flex-row items-center justify-between gap-4">

@@ -52,8 +52,8 @@ export default function Sidebar({
       // Under "All Sports", display only pinned streams
       return streams.filter((s) => s.showInAllSports === true).length;
     }
-    // Other categories (Football, Cricket, Basketball, TV Channel, etc.) show unpinned items in that category
-    return streams.filter((s) => s.category === category && s.showInAllSports !== true).length;
+    // Other categories (Football, Cricket, Basketball, TV Channel, etc.)
+    return streams.filter((s) => s.category === category).length;
   };
 
   const getCategoryMeta = (name: string) => {
