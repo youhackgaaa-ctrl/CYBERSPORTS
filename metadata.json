@@ -1,0 +1,6 @@
+{
+  "name": "Sports Live Streaming Dashboard",
+  "description": "A premium cyber-neon dark-themed sports streaming dashboard with live match filters, interactive watch page with mock crowd chat, and a full admin management panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
