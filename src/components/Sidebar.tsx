@@ -15,15 +15,16 @@ import {
   Menu, 
   X,
   Radio,
-  Clock
+  Clock,
+  Layout
 } from "lucide-react";
 import { StreamItem } from "../types";
 
 interface SidebarProps {
   activeCategory: string;
   setActiveCategory: (category: string) => void;
-  currentView: { type: string; activeId?: string };
-  setCurrentView: (view: { type: string; activeId?: string }) => void;
+  currentView: { type: string; activeId?: string; activeIds?: string[] };
+  setCurrentView: (view: { type: string; activeId?: string; activeIds?: string[] }) => void;
   streams: StreamItem[];
   favorites: string[];
   isMobileOpen: boolean;
@@ -82,6 +83,8 @@ export default function Sidebar({
     { name: "Favorites", icon: Heart, color: "text-rose-500" },
   ];
 
+  const multiViewActive = (currentView.activeIds || []).length > 0;
+
   const handleNavClick = (categoryName: string) => {
     setActiveCategory(categoryName);
     setCurrentView({ type: "dashboard" });
@@ -118,6 +121,30 @@ export default function Sidebar({
           Streams Navigation
         </p>
         
+        {/* Multi-View Link */}
+        {multiViewActive && (
+          <button
+            onClick={() => setCurrentView({ type: "multiwatch", activeIds: currentView.activeIds })}
+            className={`flex items-center justify-between w-full p-3.5 rounded-xl transition-all duration-300 group mb-4 ${
+              currentView.type === "multiwatch"
+                ? "bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan"
+                : "text-gray-400 hover:bg-[#1E2230]/40 border border-transparent"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Layout className={`w-5 h-5 transition-transform duration-300 group-hover:scale-110 ${
+                currentView.type === "multiwatch" ? "text-neon-cyan" : "text-gray-500 group-hover:text-neon-cyan"
+              }`} />
+              <span className="font-sans font-bold text-sm tracking-wide">Multi-View Matrix</span>
+            </div>
+            <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-md ${
+              currentView.type === "multiwatch" ? "bg-neon-cyan text-black" : "bg-[#1E2230] text-neon-cyan"
+            }`}>
+              {currentView.activeIds?.length}
+            </span>
+          </button>
+        )}
+
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView.type === "dashboard" && activeCategory === item.name;

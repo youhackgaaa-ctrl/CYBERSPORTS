@@ -18,6 +18,7 @@ import HeroSection from "./components/HeroSection";
 import StreamCard from "./components/StreamCard";
 import WatchPage from "./components/WatchPage";
 import AdminPanel from "./components/AdminPanel";
+import MultiWatchPage from "./components/MultiWatchPage";
 
 export default function App() {
   // Streams State (Now backed by Firestore)
@@ -38,10 +39,38 @@ export default function App() {
   });
 
   // Current View Router State
-  // { type: "dashboard" | "watch" | "admin", activeId?: string }
-  const [currentView, setCurrentView] = useState<{ type: string; activeId?: string }>(() => {
+  // { type: "dashboard" | "watch" | "admin" | "multiwatch", activeId?: string, activeIds?: string[] }
+  const [currentView, setCurrentView] = useState<{ type: string; activeId?: string; activeIds?: string[] }>(() => {
     return { type: "dashboard" };
   });
+
+  // Handle Multi-Watch Toggle
+  const handleToggleMultiWatch = (id: string, e?: any) => {
+    if (e) e.stopPropagation();
+    
+    setCurrentView((prev) => {
+      const currentIds = prev.activeIds || [];
+      const alreadyAdded = currentIds.includes(id);
+      
+      let nextIds: string[];
+      if (alreadyAdded) {
+        nextIds = currentIds.filter(cid => cid !== id);
+      } else {
+        // Limit to 4 streams for performance/layout
+        if (currentIds.length >= 4) {
+          alert("Maximum 4 streams allowed in Multi-View");
+          return prev;
+        }
+        nextIds = [...currentIds, id];
+      }
+
+      return { 
+        ...prev, 
+        type: nextIds.length > 0 ? "multiwatch" : "dashboard",
+        activeIds: nextIds 
+      };
+    });
+  };
 
   // Active filter category
   const [activeCategory, setActiveCategory] = useState<string>("All Sports");
@@ -68,7 +97,13 @@ export default function App() {
       snapshot.forEach((doc: any) => {
         streamsData.push({ id: doc.id, ...doc.data() } as StreamItem);
       });
-      console.log(`[MATRIX] Sync Success: ${streamsData.length} nodes received. Source: ${snapshot.metadata.fromCache ? 'CACHE' : 'SERVER'}`);
+      
+      const isFromCache = snapshot.metadata.fromCache;
+      const isPending = snapshot.metadata.hasPendingWrites;
+      
+      console.log(`[MATRIX] Update Received. Nodes: ${streamsData.length}. Source: ${isFromCache ? 'LOCAL_CACHE' : 'SERVER_UPLINK'}. Pending: ${isPending}`);
+      
+      // Even if empty, we set loading to false to show the dashboard empty state rather than a spinner
       setStreams(streamsData);
       setLoading(false);
       setError(null);
@@ -79,12 +114,16 @@ export default function App() {
       setConnectionStatus("connecting");
       const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
       
-      unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, handleSnapshot, (err) => {
+      unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+        handleSnapshot(snapshot);
+      }, (err) => {
         console.warn("[MATRIX] Ordered sync failed, engaging fallback protocol...", err);
         const qSimple = query(collection(db, "streams"));
-        fallbackUnsubscribe = onSnapshot(qSimple, { includeMetadataChanges: true }, handleSnapshot, (fallbackErr) => {
+        fallbackUnsubscribe = onSnapshot(qSimple, { includeMetadataChanges: true }, (snapshot) => {
+          handleSnapshot(snapshot);
+        }, (fallbackErr) => {
           console.error("[MATRIX] Global Link Failure:", fallbackErr);
-          setError(`Matrix Link Failure: ${fallbackErr.message}. Check uplink status.`);
+          setError(`Matrix Link Failure: ${fallbackErr.message}`);
           setConnectionStatus("failed");
           setLoading(false);
         });
@@ -187,6 +226,9 @@ export default function App() {
 
   // Core Category Filtering Logic
   let filteredStreams = [...streams];
+  
+  // Track streams already in multi-view
+  const multiWatchIds = currentView.activeIds || [];
 
   if (activeCategory === "All Sports") {
     // Show all streams in the main dashboard
@@ -363,10 +405,25 @@ export default function App() {
                     <div className="w-16 h-16 rounded-full bg-[#1E2230] flex items-center justify-center mb-4">
                       <FilterX className="w-8 h-8 text-gray-500" />
                     </div>
-                    <h3 className="font-display font-bold text-lg text-white mb-2 uppercase tracking-wide">No Active Nodes Found</h3>
-                    <p className="text-gray-400 text-sm max-w-xs mx-auto font-mono">
+                    <h3 className="text-xl font-display font-bold text-white mb-2 uppercase tracking-tight">
+                      NO ACTIVE NODES FOUND
+                    </h3>
+                    <p className="text-gray-500 font-mono text-xs max-w-xs leading-relaxed uppercase tracking-tighter">
                       The matrix frequency is silent. No streams currently matching your sector filter or search criteria.
                     </p>
+                    {streams.length > 0 && (
+                      <div className="mt-6 flex flex-col items-center gap-3">
+                        <p className="text-neon-cyan font-mono text-[10px] uppercase tracking-widest animate-pulse">
+                          {streams.length} Total nodes detected in other sectors
+                        </p>
+                        <button 
+                          onClick={() => setSelectedCategory("All Sports")}
+                          className="px-4 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan font-mono text-[10px] rounded-lg hover:bg-neon-cyan/20 transition-all uppercase tracking-wider"
+                        >
+                          View All Sports Feed
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -377,6 +434,8 @@ export default function App() {
                         isFavorited={favorites.includes(stream.id)}
                         onToggleFavorite={handleToggleFavorite}
                         onWatch={handleWatchStream}
+                        isMultiWatch={multiWatchIds.includes(stream.id)}
+                        onToggleMultiWatch={handleToggleMultiWatch}
                       />
                     ))}
                   </div>
@@ -400,6 +459,25 @@ export default function App() {
                   favorites={favorites}
                   onToggleFavorite={handleToggleFavorite}
                   onBack={() => setCurrentView({ type: "dashboard" })}
+                />
+              </motion.div>
+            )}
+
+            {/* VIEW D: MULTI-VIEW MATRIX */}
+            {currentView.type === "multiwatch" && currentView.activeIds && (
+              <motion.div
+                key="multiwatch-view"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.3 }}
+              >
+                <MultiWatchPage
+                  streams={streams}
+                  activeIds={currentView.activeIds}
+                  onBack={() => setCurrentView({ type: "dashboard" })}
+                  onRemoveId={(id) => handleToggleMultiWatch(id)}
+                  onAddStream={() => setCurrentView({ type: "dashboard" })}
                 />
               </motion.div>
             )}

@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { Heart, Users, Play, Radio, Calendar, Clock } from "lucide-react";
+import { Heart, Users, Play, Radio, Calendar, Clock, Layout } from "lucide-react";
 import { StreamItem } from "../types";
 
 interface StreamCardProps {
@@ -12,6 +12,8 @@ interface StreamCardProps {
   isFavorited: boolean;
   onToggleFavorite: (id: string, e: any) => void;
   onWatch: (id: string) => void;
+  isMultiWatch: boolean;
+  onToggleMultiWatch: (id: string, e: any) => void;
   key?: React.Key;
 }
 
@@ -20,6 +22,8 @@ export default function StreamCard({
   isFavorited,
   onToggleFavorite,
   onWatch,
+  isMultiWatch,
+  onToggleMultiWatch,
 }: StreamCardProps) {
   const isLive = stream.status === "Live";
   const isTv = stream.category === "TV Channel";
@@ -76,48 +80,67 @@ export default function StreamCard({
       }`} />
 
       {/* Top row: Status badges and Favorite heart */}
-      <div className="flex items-center justify-between gap-2 z-10">
-        <div className="flex items-center gap-1.5">
-          {stream.status !== "Live" && !timeLeft.isOver ? (
-            <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-500 tracking-wider uppercase animate-pulse">
-              <Clock className="w-2.5 h-2.5" />
-              {timeLeft.days > 0 ? `${timeLeft.days}d ` : ""}{timeLeft.hours.toString().padStart(2, "0")}h {timeLeft.minutes.toString().padStart(2, "0")}m {timeLeft.seconds.toString().padStart(2, "0")}s
-            </span>
-          ) : isLive ? (
-            <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/30 text-red-500 tracking-wider uppercase animate-pulse">
-              <span className="w-1 h-1 rounded-full bg-red-500" />
-              LIVE
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan tracking-wider uppercase">
-              <Calendar className="w-2.5 h-2.5" />
-              UPCOMING
-            </span>
-          )}
+        <div className="flex items-center gap-2 z-10">
+          <div className="flex items-center gap-1.5">
+            {stream.status !== "Live" && !timeLeft.isOver ? (
+              <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-500 tracking-wider uppercase animate-pulse">
+                <Clock className="w-2.5 h-2.5" />
+                {timeLeft.days > 0 ? `${timeLeft.days}d ` : ""}{timeLeft.hours.toString().padStart(2, "0")}h {timeLeft.minutes.toString().padStart(2, "0")}m {timeLeft.seconds.toString().padStart(2, "0")}s
+              </span>
+            ) : isLive ? (
+              <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/30 text-red-500 tracking-wider uppercase animate-pulse">
+                <span className="w-1 h-1 rounded-full bg-red-500" />
+                LIVE
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 font-mono text-[9px] font-bold px-2 py-0.5 rounded-md bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan tracking-wider uppercase">
+                <Calendar className="w-2.5 h-2.5" />
+                UPCOMING
+              </span>
+            )}
 
-          <span className={`font-mono text-[9px] font-semibold px-2 py-0.5 rounded-md ${
-            isTv 
-              ? "bg-purple-500/10 border border-purple-500/30 text-purple-400" 
-              : "bg-[#1E2230] text-gray-400"
-          }`}>
-            {stream.category.toUpperCase()}
-          </span>
+            <span className={`font-mono text-[9px] font-semibold px-2 py-0.5 rounded-md ${
+              isTv 
+                ? "bg-purple-500/10 border border-purple-500/30 text-purple-400" 
+                : "bg-[#1E2230] text-gray-400"
+            }`}>
+              {stream.category.toUpperCase()}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Multi-View Button */}
+            {isLive && (
+              <button
+                onClick={(e) => onToggleMultiWatch(stream.id, e)}
+                className={`p-2 rounded-xl transition-all duration-300 bg-[#1E2230]/40 border border-[#1E2230] group/multi hover:bg-[#1E2230] cursor-pointer ${
+                  isMultiWatch 
+                    ? "text-neon-cyan border-neon-cyan/30 shadow-[0_0_8px_rgba(0,212,255,0.2)]" 
+                    : "text-gray-400 hover:text-neon-cyan"
+                }`}
+                title={isMultiWatch ? "Remove from Multi-View" : "Add to Multi-View"}
+              >
+                <Layout className={`w-4 h-4 transition-transform duration-300 group-hover/multi:scale-110 ${
+                  isMultiWatch ? "fill-neon-cyan/20" : ""
+                }`} />
+              </button>
+            )}
+
+            {/* Favorite Button */}
+            <button
+              onClick={(e) => onToggleFavorite(stream.id, e)}
+              className={`p-2 rounded-xl transition-all duration-300 bg-[#1E2230]/40 border border-[#1E2230] group/fav hover:bg-[#1E2230] cursor-pointer ${
+                isFavorited 
+                  ? "text-rose-500 border-rose-500/30 shadow-[0_0_8px_rgba(244,63,94,0.2)]" 
+                  : "text-gray-400 hover:text-rose-400"
+              }`}
+            >
+              <Heart className={`w-4 h-4 transition-transform duration-300 group-hover/fav:scale-125 ${
+                isFavorited ? "fill-rose-500 text-rose-500" : ""
+              }`} />
+            </button>
+          </div>
         </div>
-
-        {/* Favorite Button */}
-        <button
-          onClick={(e) => onToggleFavorite(stream.id, e)}
-          className={`p-2 rounded-xl transition-all duration-300 bg-[#1E2230]/40 border border-[#1E2230] group/fav hover:bg-[#1E2230] cursor-pointer ${
-            isFavorited 
-              ? "text-rose-500 border-rose-500/30 shadow-[0_0_8px_rgba(244,63,94,0.2)]" 
-              : "text-gray-400 hover:text-rose-400"
-          }`}
-        >
-          <Heart className={`w-4 h-4 transition-transform duration-300 group-hover/fav:scale-125 ${
-            isFavorited ? "fill-rose-500 text-rose-500" : ""
-          }`} />
-        </button>
-      </div>
 
       {/* Middle row: Team scoreboards or Channel Art */}
       <div className="my-6 z-10 flex-1 flex flex-col justify-center">

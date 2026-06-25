@@ -24,7 +24,8 @@ import {
   Key,
   Radio,
   Clock,
-  Settings
+  Settings,
+  ArrowLeft
 } from "lucide-react";
 import { collection, addDoc, updateDoc, doc, deleteDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -36,6 +37,7 @@ interface AdminPanelProps {
   onResetDefaults: () => void;
   categories: string[];
   setCategories: React.Dispatch<React.SetStateAction<string[]>>;
+  onClose: () => void;
 }
 
 export default function AdminPanel({
@@ -44,6 +46,7 @@ export default function AdminPanel({
   onResetDefaults,
   categories,
   setCategories,
+  onClose,
 }: AdminPanelProps) {
   // Form State
   const [formData, setFormData] = useState({
@@ -620,6 +623,13 @@ export default function AdminPanel({
       {/* Page Title Row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1E2230] pb-6">
         <div className="flex items-center gap-3">
+          <button 
+            onClick={onClose}
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/50 border border-[#1E2230] hover:border-rose-500/50 text-gray-400 hover:text-rose-500 transition-all mr-2 group"
+            title="Return to Dashboard"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+          </button>
           <div className="w-10 h-10 rounded-xl bg-neon-green/10 border border-neon-green/30 flex items-center justify-center text-neon-green glow-green">
             <ShieldCheck className="w-5 h-5" />
           </div>
