@@ -16,7 +16,7 @@ import {
   Users
 } from "lucide-react";
 import Hls from "hls.js";
-import shaka from "shaka-player";
+import * as shaka from "shaka-player";
 import { StreamItem } from "../types";
 
 interface PlayerProps {
@@ -24,7 +24,7 @@ interface PlayerProps {
   onRemove: () => void;
   isFocused: boolean;
   onFocus: () => void;
-  key?: React.Key;
+  key?: any;
 }
 
 function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
@@ -37,22 +37,30 @@ function Player({ stream, onRemove, isFocused, onFocus }: PlayerProps) {
     if (!video || !stream.streamUrl) return;
 
     let hls: Hls | null = null;
-    let shakaPlayer: shaka.Player | null = null;
+    let shakaPlayer: any = null;
     const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
 
     if (isDashUrl) {
-      shaka.polyfill.installAll();
-      if (shaka.Player.isBrowserSupported()) {
-        shakaPlayer = new shaka.Player(video);
+      (shaka as any).polyfill.installAll();
+      if ((shaka as any).Player.isBrowserSupported()) {
+        shakaPlayer = new (shaka as any).Player(video);
+        
+        shakaPlayer.configure({
+          manifest: {
+            dash: { ignoreDrmInfo: true }
+          }
+        });
+
         shakaPlayer.addEventListener('error', (event: any) => {
-          console.error('Shaka Error', event.detail);
-          setError("DASH Connection Failed");
+          const err = event.detail;
+          console.error('Shaka Error', err);
+          setError(`DASH Error: ${err.code}`);
         });
         shakaPlayer.load(stream.streamUrl).then(() => {
-          video.play().catch(e => console.log("Autoplay blocked", e));
-        }).catch(e => {
+          video.play().catch((e: any) => console.log("Autoplay blocked", e));
+        }).catch((e: any) => {
           console.error("Shaka Load Error", e);
-          setError("Stream Load Failed");
+          setError("Stream Blocked or Encrypted");
         });
       }
     } else if (Hls.isSupported()) {

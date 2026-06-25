@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Hls from "hls.js";
-import shaka from "shaka-player";
+import * as shaka from "shaka-player";
 import { 
   Heart, 
   Share2, 
@@ -170,6 +170,7 @@ export default function WatchPage({
   const [viewerCount, setViewerCount] = useState(stream.viewers);
   const [shareCopied, setShareCopied] = useState(false);
   const [isLocalFullscreen, setIsLocalFullscreen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Live Countdown State
   const [timeLeft, setTimeLeft] = useState(() => {
@@ -263,18 +264,34 @@ export default function WatchPage({
     if (!video) return;
 
     let hls: Hls | null = null;
-    let shakaPlayer: shaka.Player | null = null;
+    let shakaPlayer: any = null;
     const isHlsUrl = stream.streamUrl.toLowerCase().includes("m3u8");
     const isDashUrl = stream.streamUrl.toLowerCase().includes("mpd");
 
     if (isDashUrl) {
       // DASH support via Shaka Player
-      shaka.polyfill.installAll();
-      if (shaka.Player.isBrowserSupported()) {
-        shakaPlayer = new shaka.Player(video);
+      (shaka as any).polyfill.installAll();
+      if ((shaka as any).Player.isBrowserSupported()) {
+        shakaPlayer = new (shaka as any).Player(video);
         
+        // Optional: Configure for streams that might have DRM info but are actually clear
+        // or just to be more resilient.
+        shakaPlayer.configure({
+          manifest: {
+            dash: {
+              ignoreDrmInfo: true
+            }
+          },
+          streaming: {
+            bufferingGoal: 30,
+            rebufferingGoal: 15
+          }
+        });
+
         shakaPlayer.addEventListener('error', (event: any) => {
-          console.error('Shaka Player Error', event.detail);
+          const err = event.detail;
+          console.error('Shaka Player Error', err);
+          setError(`Stream Error: ${err.code} - ${err.message || 'Check connection'}`);
         });
 
         shakaPlayer.load(stream.streamUrl).then(() => {
@@ -283,9 +300,11 @@ export default function WatchPage({
           });
         }).catch((err) => {
           console.error("Shaka load failed:", err);
+          setError(`Load Failed: ${err.code || 'DRM or Network Error'}`);
         });
       } else {
         console.error("Browser does not support DASH playback");
+        setError("DASH not supported in this browser");
       }
     } else if (isHlsUrl) {
       if (Hls.isSupported()) {
@@ -567,6 +586,19 @@ export default function WatchPage({
             )}
 
             {/* Custom interactive overlays */}
+            {error && (
+              <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-6 text-center">
+                <ShieldAlert className="w-12 h-12 text-rose-500 mb-4 animate-pulse" />
+                <h3 className="font-display font-bold text-lg text-white mb-2 uppercase tracking-tight">Stream Signal Lost</h3>
+                <p className="text-gray-400 text-xs font-mono max-w-sm mb-6">{error}</p>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-2 bg-rose-500 text-white font-mono text-[10px] rounded-lg hover:bg-rose-600 transition-all uppercase tracking-widest"
+                >
+                  Reconnect Uplink
+                </button>
+              </div>
+            )}
             {/* Live telemetry stamp - shown on top of standard video and iframe if hover/visible */}
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg border border-[#1E2230] pointer-events-none">
               <span className="relative flex h-2 w-2">
