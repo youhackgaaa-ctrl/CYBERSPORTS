@@ -270,41 +270,64 @@ export default function WatchPage({
 
     if (isDashUrl) {
       // DASH support via Shaka Player
-      (shaka as any).polyfill.installAll();
-      if ((shaka as any).Player.isBrowserSupported()) {
-        shakaPlayer = new (shaka as any).Player(video);
-        
-        // Optional: Configure for streams that might have DRM info but are actually clear
-        // or just to be more resilient.
-        shakaPlayer.configure({
-          manifest: {
-            dash: {
-              ignoreDrmInfo: true
+      try {
+        (shaka as any).polyfill.installAll();
+        if ((shaka as any).Player.isBrowserSupported()) {
+          shakaPlayer = new (shaka as any).Player(video);
+          
+          // Advanced configuration for resilience
+          shakaPlayer.configure({
+            manifest: {
+              dash: {
+                ignoreDrmInfo: true,
+                autoCorrectDrift: true
+              }
+            },
+            streaming: {
+              bufferingGoal: 30,
+              rebufferingGoal: 15,
+              bufferBehind: 30,
+              ignoreTextStreamFailures: true,
+              alwaysStreamText: false,
+              retryParameters: {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                backoffFactor: 2
+              }
             }
-          },
-          streaming: {
-            bufferingGoal: 30,
-            rebufferingGoal: 15
-          }
-        });
-
-        shakaPlayer.addEventListener('error', (event: any) => {
-          const err = event.detail;
-          console.error('Shaka Player Error', err);
-          setError(`Stream Error: ${err.code} - ${err.message || 'Check connection'}`);
-        });
-
-        shakaPlayer.load(stream.streamUrl).then(() => {
-          video.play().catch((err) => {
-            console.warn("Shaka Autoplay failed:", err);
           });
-        }).catch((err) => {
-          console.error("Shaka load failed:", err);
-          setError(`Load Failed: ${err.code || 'DRM or Network Error'}`);
-        });
-      } else {
-        console.error("Browser does not support DASH playback");
-        setError("DASH not supported in this browser");
+
+          shakaPlayer.addEventListener('error', (event: any) => {
+            const err = event.detail;
+            console.error('Shaka Player Error', err);
+            // Translate common Shaka errors to human readable ones
+            if (err.code === 6001 || err.code === 6007) {
+              setError("Encrypted Content Detected: This stream requires DRM keys which are not provided.");
+            } else if (err.code === 1001) {
+              setError("Network Error: Failed to fetch manifest (CORS or 404)");
+            } else {
+              setError(`Signal Interrupted [Code: ${err.code}]`);
+            }
+          });
+
+          shakaPlayer.load(stream.streamUrl).then(() => {
+            video.play().catch((err) => {
+              console.warn("Shaka Autoplay failed:", err);
+            });
+          }).catch((err) => {
+            console.error("Shaka load failed:", err);
+            if (err.code === 6001 || err.code === 6007) {
+              setError("Encrypted Content: Stream is DRM protected.");
+            } else {
+              setError(`Load Error: ${err.code || 'Link Invalid'}`);
+            }
+          });
+        } else {
+          setError("Platform Incompatible: DASH playback not supported.");
+        }
+      } catch (e) {
+        console.error("Shaka Init Failed", e);
+        setError("Player Initialization Failed");
       }
     } else if (isHlsUrl) {
       if (Hls.isSupported()) {
