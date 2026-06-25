@@ -19,10 +19,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with settings for better reliability on slow networks
-// Using persistentLocalCache is the modern way to enable persistence in v9+
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  }),
+  localCache: persistentLocalCache({}),
   ignoreUndefinedProperties: true,
 }, "ai-studio-13428611-0a73-4207-be9f-e8c6e3431b4c");

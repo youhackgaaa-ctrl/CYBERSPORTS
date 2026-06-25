@@ -68,7 +68,7 @@ export default function App() {
       snapshot.forEach((doc: any) => {
         streamsData.push({ id: doc.id, ...doc.data() } as StreamItem);
       });
-      console.log("Fetched streams:", streamsData.length);
+      console.log(`[MATRIX] Sync Success: ${streamsData.length} nodes received. Source: ${snapshot.metadata.fromCache ? 'CACHE' : 'SERVER'}`);
       setStreams(streamsData);
       setLoading(false);
       setError(null);
@@ -76,15 +76,15 @@ export default function App() {
     };
 
     const startListening = () => {
+      setConnectionStatus("connecting");
       const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
       
-      unsubscribe = onSnapshot(q, handleSnapshot, (err) => {
-        console.error("Firestore streams error (ordered):", err);
-        // If index is missing or permissions error, try simple query
+      unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, handleSnapshot, (err) => {
+        console.warn("[MATRIX] Ordered sync failed, engaging fallback protocol...", err);
         const qSimple = query(collection(db, "streams"));
-        fallbackUnsubscribe = onSnapshot(qSimple, handleSnapshot, (fallbackErr) => {
-          console.error("Firestore streams error (simple):", fallbackErr);
-          setError(`Matrix Link Failure: ${fallbackErr.message}`);
+        fallbackUnsubscribe = onSnapshot(qSimple, { includeMetadataChanges: true }, handleSnapshot, (fallbackErr) => {
+          console.error("[MATRIX] Global Link Failure:", fallbackErr);
+          setError(`Matrix Link Failure: ${fallbackErr.message}. Check uplink status.`);
           setConnectionStatus("failed");
           setLoading(false);
         });
@@ -104,23 +104,26 @@ export default function App() {
     const unsubscribe = onSnapshot(doc(db, "settings", "categories"), async (snapshot) => {
       if (snapshot.exists()) {
         const list = snapshot.data().list || [];
+        console.log(`[MATRIX] Categories Synced: ${list.length} units detected.`);
         if (list.length > 0) {
           setCategories(list);
         } else {
           setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
         }
       } else {
+        console.warn("[MATRIX] Categories node missing. Initializing standard protocols...");
         const defaultCats = ["Football", "Cricket", "Basketball", "TV Channel"];
         setCategories(defaultCats);
         try {
           await setDoc(doc(db, "settings", "categories"), { list: defaultCats });
+          console.log("[MATRIX] Protocols initialized successfully.");
         } catch (e) {
-          console.error("Error initializing categories:", e);
+          console.error("[MATRIX] Initialization Error:", e);
         }
       }
     }, (error) => {
-      console.error("Firestore categories error:", error);
-      setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
+      console.error("[MATRIX] Category Sync Failure:", error);
+      setError("Secondary Data Link Failure. Some interface elements may be missing.");
     });
 
     return () => unsubscribe();
@@ -298,7 +301,12 @@ export default function App() {
                         ALL SPORTS FEED: ADMIN CONTROLLABLE
                       </span>
                     )}
-                    <span>GRID_COUNT: <span className="text-white">{filteredStreams.length}</span></span>
+                    <div className="flex flex-col items-end">
+                      <span className="font-mono text-[10px] text-gray-500 uppercase tracking-tighter">Current Grid Sector</span>
+                      <span className="font-mono text-[11px] text-neon-cyan font-bold tracking-widest flex items-center gap-2">
+                        {filteredStreams.length} / {streams.length} <span className="text-[9px] text-gray-600 font-normal">NODES_SYNCED</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
