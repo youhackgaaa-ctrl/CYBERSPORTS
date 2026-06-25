@@ -53,18 +53,34 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // Dynamic categories state (Now backed by Firestore)
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(["Football", "Cricket", "Basketball", "TV Channel"]);
+
+  const [error, setError] = useState<string | null>(null);
 
   // Sync streams from Firestore
   useEffect(() => {
     const q = query(collection(db, "streams"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    
+    const handleSnapshot = (snapshot: any) => {
       const streamsData: StreamItem[] = [];
-      snapshot.forEach((doc) => {
+      snapshot.forEach((doc: any) => {
         streamsData.push({ id: doc.id, ...doc.data() } as StreamItem);
       });
+      console.log("Fetched streams:", streamsData.length);
       setStreams(streamsData);
       setLoading(false);
+      setError(null);
+    };
+
+    const unsubscribe = onSnapshot(q, handleSnapshot, (error) => {
+      console.error("Firestore streams error (ordered):", error);
+      // Fallback: try without ordering if index is missing
+      const qSimple = query(collection(db, "streams"));
+      onSnapshot(qSimple, handleSnapshot, (err) => {
+        console.error("Firestore streams error (simple):", err);
+        setError(`Connection failed: ${err.message}`);
+        setLoading(false);
+      });
     });
 
     return () => unsubscribe();
@@ -74,17 +90,24 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "settings", "categories"), async (snapshot) => {
       if (snapshot.exists()) {
-        setCategories(snapshot.data().list || []);
+        const list = snapshot.data().list || [];
+        if (list.length > 0) {
+          setCategories(list);
+        } else {
+          setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
+        }
       } else {
-        // Initialize if not exists in Firestore
         const defaultCats = ["Football", "Cricket", "Basketball", "TV Channel"];
         setCategories(defaultCats);
         try {
           await setDoc(doc(db, "settings", "categories"), { list: defaultCats });
         } catch (e) {
-          console.error("Error initializing categories", e);
+          console.error("Error initializing categories:", e);
         }
       }
+    }, (error) => {
+      console.error("Firestore categories error:", error);
+      setCategories(["Football", "Cricket", "Basketball", "TV Channel"]);
     });
 
     return () => unsubscribe();
@@ -150,8 +173,8 @@ export default function App() {
   let filteredStreams = [...streams];
 
   if (activeCategory === "All Sports") {
-    // Only show items where showInAllSports is enabled (pinned)
-    filteredStreams = streams.filter((s) => s.showInAllSports === true);
+    // Show all streams in the main dashboard
+    filteredStreams = [...streams];
   } else if (activeCategory === "Favorites") {
     // Favorites category shows all streams favorited by the user
     filteredStreams = streams.filter((s) => favorites.includes(s.id));
@@ -266,51 +289,39 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Match/Stream Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredStreams.map((stream) => (
-                    <StreamCard
-                      key={stream.id}
-                      stream={stream}
-                      isFavorited={favorites.includes(stream.id)}
-                      onToggleFavorite={handleToggleFavorite}
-                      onWatch={handleWatchStream}
-                    />
-                  ))}
-                </div>
-
-                {/* Empty State Fallback */}
-                {filteredStreams.length === 0 && (
-                  <div className="flex flex-col items-center justify-center p-12 bg-[#12141C] border border-[#1E2230] rounded-2xl text-center max-w-xl mx-auto">
-                    <FilterX className="w-12 h-12 text-gray-500 mb-4" />
-                    <h3 className="font-display font-semibold text-base text-white mb-1.5">
-                      NO MATCH PACKETS DETECTED
-                    </h3>
-                    <p className="font-sans text-sm text-gray-400 mb-6">
-                      No stream sources match the current filter or search criteria inside the grid network.
-                    </p>
-                    
-                    <div className="flex items-center gap-3">
-                      {searchQuery && (
-                        <button
-                          onClick={() => setSearchQuery("")}
-                          className="px-4 py-2 bg-neon-cyan hover:bg-neon-cyan/90 text-black font-semibold text-xs rounded-xl transition-all cursor-pointer"
-                        >
-                          Clear Search Filter
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setActiveCategory("All Sports");
-                          setSearchQuery("");
-                        }}
-                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs rounded-xl transition-all"
-                      >
-                        Reset Navigation
-                      </button>
-                    </div>
+                {/* Error Banner */}
+                {error && (
+                  <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3 text-red-500 font-mono text-xs">
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    <span>{error}</span>
                   </div>
                 )}
+
+                {/* Match/Stream Grid */}
+                {filteredStreams.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center border border-[#1E2230] rounded-3xl bg-[#12141C]/30 backdrop-blur-sm">
+                    <div className="w-16 h-16 rounded-full bg-[#1E2230] flex items-center justify-center mb-4">
+                      <FilterX className="w-8 h-8 text-gray-500" />
+                    </div>
+                    <h3 className="font-display font-bold text-lg text-white mb-2 uppercase tracking-wide">No Active Nodes Found</h3>
+                    <p className="text-gray-400 text-sm max-w-xs mx-auto font-mono">
+                      The matrix frequency is silent. No streams currently matching your sector filter or search criteria.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {filteredStreams.map((stream) => (
+                      <StreamCard
+                        key={stream.id}
+                        stream={stream}
+                        isFavorited={favorites.includes(stream.id)}
+                        onToggleFavorite={handleToggleFavorite}
+                        onWatch={handleWatchStream}
+                      />
+                    ))}
+                  </div>
+                )}
+
               </motion.div>
             )}
 

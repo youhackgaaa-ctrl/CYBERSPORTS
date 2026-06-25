@@ -10,6 +10,9 @@
       "streamUrl": "string",
       "type": "string",
       "createdAt": "timestamp"
+    },
+    "settings": {
+      "list": "array"
     }
   }
 }

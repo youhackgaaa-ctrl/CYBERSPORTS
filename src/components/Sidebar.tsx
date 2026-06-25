@@ -49,8 +49,8 @@ export default function Sidebar({
       return favorites.length;
     }
     if (category === "All Sports") {
-      // Under "All Sports", display only pinned streams
-      return streams.filter((s) => s.showInAllSports === true).length;
+      // Show total count for All Sports
+      return streams.length;
     }
     // Other categories (Football, Cricket, Basketball, TV Channel, etc.)
     return streams.filter((s) => s.category === category).length;
