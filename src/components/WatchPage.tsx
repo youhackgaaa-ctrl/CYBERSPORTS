@@ -159,17 +159,18 @@ export default function WatchPage({
     
     const newCustomStream: StreamItem = {
       id: `custom-${Date.now()}`,
-      title: "User Custom Uplink",
-      streamUrl: customUrl,
-      category: "External",
+      title: "Live Feed",
+      streamUrl: customUrl.trim(),
+      category: "",
       status: "Live",
       viewers: 1,
       bannerUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=400",
-      description: "Direct connection to a user-provided stream source."
+      description: ""
     };
     
     setCustomStreamData(newCustomStream);
     setIsCustomMode(true);
+    setCustomUrl("");
     setError(null);
   };
 
@@ -386,15 +387,7 @@ export default function WatchPage({
   };
 
   const handlePlayPause = () => {
-    if (videoRef.current) {
-      if (videoRef.current.paused) {
-        videoRef.current.play().catch((err) => {
-          console.warn("Playback failed:", err);
-        });
-      } else {
-        videoRef.current.pause();
-      }
-    }
+    // Disabled as per user request
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -479,57 +472,71 @@ export default function WatchPage({
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-cyber-dark text-white font-sans p-4 lg:p-6 space-y-6">
+    <div className={`flex flex-col min-h-screen bg-black text-white font-sans ${stream.id.startsWith("custom-") ? "p-0" : "p-4 lg:p-6 space-y-6"}`}>
       
       {/* Navigation & Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
+      <div className={stream.id.startsWith("custom-") ? "fixed top-4 left-4 z-50" : ""}>
+        {!stream.id.startsWith("custom-") ? (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onBack}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#12141C] border border-[#1E2230] text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 transition-all font-sans font-medium text-sm cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Exit Arena</span>
+              </button>
+
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/30 text-neon-cyan hover:text-white transition-all font-sans font-medium text-sm cursor-pointer shadow-[0_0_15px_rgba(0,212,255,0.1)] hover:shadow-[0_0_20px_rgba(0,212,255,0.3)]"
+                title="Toggle Live Stream Full Screen"
+              >
+                <Maximize2 className="w-4 h-4" />
+                <span>Full Screen</span>
+              </button>
+            </div>
+
+            {/* Telemetry metadata status row */}
+            <div className="flex items-center gap-3 font-mono text-[11px] text-gray-500 uppercase tracking-wider">
+              <span className="hidden md:inline">STREAM_ADDR:</span>
+              <span className="text-neon-cyan bg-[#12141C] px-2.5 py-1 rounded border border-[#1E2230]">{stream.id}</span>
+              <span className="hidden md:inline">CODEC:</span>
+              <span className="hidden md:inline text-white">H.264 / AAC</span>
+            </div>
+          </div>
+        ) : (
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#12141C] border border-[#1E2230] text-gray-400 hover:text-neon-cyan hover:border-neon-cyan/40 transition-all font-sans font-medium text-sm cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-white transition-all text-xs font-medium"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Exit Arena</span>
+            <ArrowLeft className="w-3 h-3" />
+            <span>Back</span>
           </button>
-
-          <button
-            onClick={toggleFullscreen}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/30 text-neon-cyan hover:text-white transition-all font-sans font-medium text-sm cursor-pointer shadow-[0_0_15px_rgba(0,212,255,0.1)] hover:shadow-[0_0_20px_rgba(0,212,255,0.3)]"
-            title="Toggle Live Stream Full Screen"
-          >
-            <Maximize2 className="w-4 h-4" />
-            <span>Full Screen</span>
-          </button>
-        </div>
-
-        {/* Telemetry metadata status row */}
-        <div className="flex items-center gap-3 font-mono text-[11px] text-gray-500 uppercase tracking-wider">
-          <span className="hidden md:inline">STREAM_ADDR:</span>
-          <span className="text-neon-cyan bg-[#12141C] px-2.5 py-1 rounded border border-[#1E2230]">{stream.id}</span>
-          <span className="hidden md:inline">CODEC:</span>
-          <span className="hidden md:inline text-white">H.264 / AAC</span>
-        </div>
+        )}
       </div>
-      <div className="w-full grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <div className={stream.id.startsWith("custom-") ? "w-full h-screen" : "w-full grid grid-cols-1 xl:grid-cols-4 gap-6"}>
         
-        {/* Video Player Section (Left 3 cols on XL) */}
-        <div className="xl:col-span-3 space-y-6">
+        {/* Video Player Section */}
+        <div className={stream.id.startsWith("custom-") ? "w-full h-full" : "xl:col-span-3 space-y-6"}>
           {/* Video Player Screen Block */}
           <div 
             ref={playerContainerRef}
             className={`w-full flex flex-col justify-between bg-black transition-all duration-300 ${
               isLocalFullscreen 
                 ? "fixed inset-0 z-[9999] h-screen w-screen p-0" 
-                : "border border-[#1E2230] rounded-2xl overflow-hidden shadow-2xl bg-[#12141C]"
+                : stream.id.startsWith("custom-")
+                  ? "bg-black"
+                  : "border border-[#1E2230] rounded-2xl overflow-hidden shadow-2xl bg-[#12141C]"
             }`}
           >
             
             {/* Video Player Display */}
             <div 
               className={`relative bg-black flex items-center justify-center group/video overflow-hidden ${
-                isLocalFullscreen ? "w-full h-full flex-1" : "aspect-video w-full"
+                isLocalFullscreen || stream.id.startsWith("custom-") ? "w-full h-full flex-1" : "aspect-video w-full"
               }`}
-              onClick={handlePlayPause}
+              onClick={(e) => e.stopPropagation()}
             >
               {stream.status !== "Live" && !timeLeft.isOver ? (
               <div className="absolute inset-0 z-30 bg-[#07080B] flex flex-col items-center justify-center p-6 text-center">
@@ -588,7 +595,6 @@ export default function WatchPage({
                 controls={true}
                 playsInline={true}
                 onPlay={handlePlay}
-                onPause={handlePause}
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 className="w-full h-full object-contain"
@@ -608,23 +614,19 @@ export default function WatchPage({
                 </button>
               </div>
             )}
-            {/* Live telemetry stamp - shown on top of standard video and iframe if hover/visible */}
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg border border-[#1E2230] pointer-events-none">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
-              <span className="font-mono text-[10px] font-bold text-gray-300 uppercase tracking-widest">
-                LIVE ({embedInfo.type.toUpperCase()})
-              </span>
-            </div>
-
-            {/* Play/Pause Overlay - Visible on Hover or when paused */}
-            <div className={`absolute inset-0 z-30 flex items-center justify-center bg-black/20 transition-opacity duration-300 ${!isPlaying ? "opacity-100" : "opacity-0 group-hover/video:opacity-100"}`}>
-              <div className="w-16 h-16 rounded-full bg-neon-cyan/80 text-black flex items-center justify-center shadow-[0_0_30px_#00D4FF] transform transition-transform group-hover/video:scale-110 active:scale-95">
-                {isPlaying ? <Pause className="w-8 h-8 fill-black" /> : <Play className="w-8 h-8 fill-black ml-1" />}
+            {/* Live telemetry stamp - hidden for custom streams */}
+            {!stream.id.startsWith("custom-") && (
+              <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg border border-[#1E2230] pointer-events-none">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="font-mono text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+                  LIVE ({embedInfo.type.toUpperCase()})
+                </span>
               </div>
-            </div>
+            )}
+
 
             {/* Exit Full Screen Button - Floating and visible in local fullscreen */}
             {isLocalFullscreen && (
@@ -640,7 +642,7 @@ export default function WatchPage({
           </div>
 
           {/* Under-Player Controls / Info Bar */}
-          {!isLocalFullscreen && (
+          {!isLocalFullscreen && !stream.id.startsWith("custom-") && (
             <div className="p-6 space-y-4">
               {/* Match "VS" Display Banner - Visual representation for Football/Matches */}
               {stream.teams && (
@@ -700,13 +702,17 @@ export default function WatchPage({
                     <h1 className="font-display font-extrabold text-xl lg:text-2xl text-white">
                       {stream.title}
                     </h1>
-                    <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 uppercase">
-                      {stream.category}
-                    </span>
+                    {stream.category && (
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 uppercase">
+                        {stream.category}
+                      </span>
+                    )}
                   </div>
-                  <p className="font-sans text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
-                    {stream.description || "Live high definition cybercast stream broadcasted straight from the cyberarena. Telemetry and live scoreboard updated continuously."}
-                  </p>
+                  {stream.description && (
+                    <p className="font-sans text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
+                      {stream.description}
+                    </p>
+                  )}
                 </div>
 
                 {/* Action buttons */}
@@ -795,8 +801,8 @@ export default function WatchPage({
         </div>
       </div>
 
-      {/* Sidebar Switcher (Right Column on XL) */}
-        {!isLocalFullscreen && (
+      {/* Sidebar Switcher (Right Column on XL) - Hidden for custom streams */}
+        {!isLocalFullscreen && !stream.id.startsWith("custom-") && (
           <div className="xl:col-span-1 space-y-6">
             {/* Play Custom URL Panel - ADMIN ONLY */}
             {isAdmin && (
