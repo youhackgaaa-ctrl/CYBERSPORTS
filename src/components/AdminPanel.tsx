@@ -53,10 +53,13 @@ export default function AdminPanel({
   setIsAdminAuthenticated,
 }: AdminPanelProps) {
   // Form State
+  const [activeTab, setActiveTab] = useState<"streams" | "categories">("streams");
   const [formData, setFormData] = useState({
     id: "",
     title: "",
     category: (categories[0] || "Football") as string,
+    isAddingNewCategory: false,
+    newCategoryName: "",
     status: "Live" as "Live" | "Upcoming",
     streamUrl: "",
     viewers: 25000,
@@ -205,6 +208,14 @@ export default function AdminPanel({
   ) => {
     const { name, value } = e.target;
     const target = e.target;
+    if (name === "category" && value === "ADD_NEW") {
+      setFormData((prev) => ({
+        ...prev,
+        isAddingNewCategory: true,
+      }));
+      return;
+    }
+
     const val = target instanceof HTMLInputElement && target.type === "checkbox"
       ? target.checked
       : name === "viewers" || name === "homeScore" || name === "awayScore"
@@ -235,18 +246,36 @@ export default function AdminPanel({
       return;
     }
 
+    let finalCategory = formData.category;
+    
+    // Auto-register new category if requested
+    if (formData.isAddingNewCategory && formData.newCategoryName.trim()) {
+      const newCat = formData.newCategoryName.trim();
+      if (!categories.includes(newCat)) {
+        try {
+          const newList = [...categories, newCat];
+          await setDoc(doc(db, "settings", "categories"), { list: newList });
+          finalCategory = newCat;
+        } catch (err) {
+          console.error("Error auto-adding category:", err);
+        }
+      } else {
+        finalCategory = newCat;
+      }
+    }
+
     const defaultLogoMap: Record<string, string> = {
       "Football": "⚽",
       "Cricket": "🏏",
       "Basketball": "🏀",
       "TV Channel": "📺"
     };
-    const defaultLogo = defaultLogoMap[formData.category] || "🏆";
+    const defaultLogo = defaultLogoMap[finalCategory] || "🏆";
 
     // Construct stream model
     const streamData: any = {
       title: formData.title,
-      category: formData.category,
+      category: finalCategory,
       status: formData.status,
       streamUrl: formData.streamUrl,
       viewers: formData.status === "Upcoming" ? 0 : formData.viewers,
@@ -332,6 +361,8 @@ export default function AdminPanel({
       id: "",
       title: "",
       category: categories[0] || "Football",
+      isAddingNewCategory: false,
+      newCategoryName: "",
       status: "Live",
       streamUrl: "",
       viewers: 25000,
@@ -672,6 +703,32 @@ export default function AdminPanel({
           </button>
         </div>
       </div>
+      
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-1 p-1 bg-[#12141C] border border-[#1E2230] rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveTab("streams")}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === "streams" 
+              ? "bg-neon-cyan text-black shadow-[0_0_15px_rgba(0,212,255,0.3)]" 
+              : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          Stream Nodes
+        </button>
+        <button
+          onClick={() => setActiveTab("categories")}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeTab === "categories" 
+              ? "bg-neon-cyan text-black shadow-[0_0_15px_rgba(0,212,255,0.3)]" 
+              : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Category Management
+        </button>
+      </div>
 
       {/* Real-time stats widgets */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -731,8 +788,9 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* Main Dual Grid: Form & Node Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      {/* Main Content Area */}
+      {activeTab === "streams" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         
         {/* Left Column wrapper containing both form and category management cards */}
         <div className="lg:col-span-1 space-y-8">
@@ -774,18 +832,44 @@ export default function AdminPanel({
                   </label>
                   <select
                     name="category"
-                    value={formData.category}
+                    value={formData.isAddingNewCategory ? "ADD_NEW" : formData.category}
                     onChange={handleInputChange}
                     className="w-full bg-[#07080B] border border-[#1E2230] focus:border-neon-cyan focus:outline-none rounded-xl px-3 py-2.5 text-sm text-white"
                   >
                     {categories.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
-                    {!categories.includes(formData.category) && formData.category && (
-                      <option value={formData.category}>{formData.category}</option>
-                    )}
+                    <option value="ADD_NEW" className="text-neon-cyan font-bold">+ Add New Category...</option>
                   </select>
                 </div>
+
+                {formData.isAddingNewCategory && (
+                  <div className="col-span-2 space-y-1.5 text-left animate-fade-in">
+                    <label className="block font-mono text-[10px] text-neon-cyan uppercase tracking-wider font-bold">
+                      New Category Name
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        name="newCategoryName"
+                        autoFocus
+                        value={formData.newCategoryName}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Tennis"
+                        className="flex-1 bg-[#07080B] border border-neon-cyan/50 focus:border-neon-cyan focus:outline-none rounded-xl px-3.5 py-2 text-xs text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, isAddingNewCategory: false, newCategoryName: "" }));
+                        }}
+                        className="px-3 py-2 bg-gray-800 text-gray-400 text-[10px] rounded-xl hover:bg-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1.5 text-left">
                   <label className="block font-mono text-[10px] text-gray-400 uppercase tracking-wider">
@@ -1039,101 +1123,6 @@ export default function AdminPanel({
             </form>
           </div>
 
-          {/* Card B: Category Management */}
-          <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-6 space-y-6 text-left">
-            <div className="border-b border-[#1E2230] pb-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-display font-bold text-sm text-white uppercase flex items-center gap-1.5">
-                  <Settings className="w-4 h-4 text-neon-cyan" />
-                  Category Management
-                </h3>
-                <p className="font-sans text-[10px] text-gray-500 mt-0.5">
-                  Add, edit, or delete platform sports categories.
-                </p>
-              </div>
-            </div>
-
-            {/* Form to Add Category */}
-            <form onSubmit={handleAddCategory} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="New Category (e.g. Tennis)"
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                className="flex-1 bg-[#07080B] border border-[#1E2230] focus:border-neon-cyan focus:outline-none rounded-xl px-3 py-2 text-xs text-white"
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-2 rounded-xl bg-neon-cyan hover:bg-neon-cyan/90 text-black font-mono text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(0,212,255,0.15)] flex items-center justify-center gap-1"
-              >
-                <Plus className="w-4 h-4" /> Add
-              </button>
-            </form>
-
-            {/* List of Categories */}
-            <div className="space-y-2.5">
-              <p className="font-mono text-[9px] text-gray-500 uppercase tracking-widest">Platform Categories ({categories.length})</p>
-              
-              <div className="divide-y divide-[#1E2230]/40 max-h-[220px] overflow-y-auto pr-1">
-                {categories.map((cat, index) => {
-                  const isEditingThis = editingCatIdx === index;
-                  return (
-                    <div key={cat} className="flex items-center justify-between py-2 gap-3">
-                      {isEditingThis ? (
-                        <div className="flex-1 flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editingCatValue}
-                            onChange={(e) => setEditingCatValue(e.target.value)}
-                            className="flex-1 bg-[#07080B] border border-neon-cyan/50 focus:border-neon-cyan focus:outline-none rounded-lg px-2 py-1 text-xs text-white"
-                          />
-                          <button
-                            onClick={() => handleSaveCategory(index)}
-                            className="px-2 py-1 bg-neon-green text-black font-mono text-[10px] font-bold rounded-md hover:bg-neon-green/95"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingCatIdx(null)}
-                            className="px-2 py-1 bg-gray-800 text-gray-400 font-mono text-[10px] rounded-md hover:bg-gray-700"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            {getCategoryIcon(cat)}
-                            <span className="font-sans font-semibold text-xs text-gray-200">
-                              {cat}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => handleStartEditCategory(index)}
-                              className="p-1 rounded bg-gray-800 hover:bg-neon-cyan hover:text-black text-gray-400 transition-all cursor-pointer"
-                              title={`Edit category ${cat}`}
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCategory(index)}
-                              className="p-1 rounded bg-gray-800 hover:bg-rose-500 hover:text-white text-gray-400 transition-all cursor-pointer"
-                              title={`Delete category ${cat}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
         </div>
 
         {/* Right Column: Node Registries Table */}
@@ -1385,8 +1374,134 @@ export default function AdminPanel({
           </div>
         </div>
 
-      </div>
+        </div>
+      ) : (
+        /* CATEGORY MANAGEMENT VIEW */
+        <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-20">
+          <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-8 space-y-8 shadow-[0_0_50px_rgba(0,0,0,0.4)]">
+            <div className="border-b border-[#1E2230] pb-6 flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-extrabold text-xl text-white uppercase flex items-center gap-3">
+                  <Settings className="w-6 h-6 text-neon-cyan" />
+                  Sports Category Registry
+                </h3>
+                <p className="font-sans text-sm text-gray-500 mt-1">
+                  Manage the dynamic categories displayed in the sidebar and stream filters.
+                </p>
+              </div>
+              <div className="font-mono text-xs text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/20 px-4 py-1.5 rounded-full">
+                {categories.length} ACTIVE CATEGORIES
+              </div>
+            </div>
 
+            {/* Large Category Add Form */}
+            <div className="bg-[#07080B] border border-[#1E2230] rounded-2xl p-6 space-y-4">
+              <label className="block font-mono text-[10px] text-gray-400 uppercase tracking-[0.2em] font-bold">
+                Register New Sports Dimension
+              </label>
+              <form onSubmit={handleAddCategory} className="flex gap-4">
+                <input
+                  type="text"
+                  placeholder="e.g. Volleyball, Tennis, Formula 1..."
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="flex-1 bg-[#12141C] border border-[#1E2230] focus:border-neon-cyan focus:outline-none rounded-xl px-5 py-3.5 text-sm text-white font-sans transition-all"
+                />
+                <button
+                  type="submit"
+                  className="px-8 py-3.5 rounded-xl bg-neon-cyan hover:bg-neon-cyan/90 text-black font-display font-black text-sm uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_20px_rgba(0,212,255,0.25)] flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Category
+                </button>
+              </form>
+            </div>
+
+            {/* Detailed Categories List */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+              {categories.map((cat, index) => {
+                const isEditingThis = editingCatIdx === index;
+                const streamCount = streams.filter(s => s.category === cat).length;
+
+                return (
+                  <div key={cat} className="bg-[#07080B]/40 border border-[#1E2230] rounded-2xl p-5 hover:border-neon-cyan/30 transition-all group">
+                    {isEditingThis ? (
+                      <div className="space-y-4">
+                        <input
+                          type="text"
+                          value={editingCatValue}
+                          autoFocus
+                          onChange={(e) => setEditingCatValue(e.target.value)}
+                          className="w-full bg-[#12141C] border border-neon-cyan focus:outline-none rounded-xl px-4 py-3 text-sm text-white font-sans"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveCategory(index)}
+                            className="flex-1 py-2.5 bg-neon-green text-black font-display font-bold text-xs uppercase rounded-xl hover:bg-neon-green/90 transition-all"
+                          >
+                            Save Changes
+                          </button>
+                          <button
+                            onClick={() => setEditingCatIdx(null)}
+                            className="px-6 py-2.5 bg-[#1E2230] text-gray-400 font-display font-bold text-xs uppercase rounded-xl hover:bg-gray-800 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-[#12141C] border border-[#1E2230] flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                            {getCategoryIcon(cat)}
+                          </div>
+                          <div>
+                            <h4 className="font-display font-bold text-base text-white tracking-tight">{cat}</h4>
+                            <p className="font-mono text-[10px] text-gray-500 uppercase flex items-center gap-1.5 mt-0.5">
+                              <Activity className="w-3 h-3 text-neon-green" />
+                              {streamCount} ACTIVE NODES
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleStartEditCategory(index)}
+                            className="p-2.5 rounded-xl bg-[#12141C] hover:bg-neon-cyan hover:text-black text-gray-400 border border-[#1E2230] transition-all cursor-pointer"
+                            title="Edit Category Name"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(index)}
+                            className="p-2.5 rounded-xl bg-[#12141C] hover:bg-rose-500 hover:text-white text-gray-400 border border-[#1E2230] transition-all cursor-pointer"
+                            title="Delete Category"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tips / Info Banner */}
+          <div className="bg-neon-cyan/5 border border-neon-cyan/20 rounded-2xl p-6 flex gap-4 items-start">
+            <div className="p-2 bg-neon-cyan/10 rounded-lg text-neon-cyan">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h5 className="font-display font-bold text-sm text-white uppercase tracking-wider">Operational Guidelines</h5>
+              <p className="font-sans text-xs text-gray-500 mt-1 leading-relaxed">
+                Deleting a category will automatically re-assign all its active stream nodes to the <strong>"Uncategorized"</strong> registry. Renaming a category will update all linked stream nodes in real-time across the platform's telemetry grid.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
