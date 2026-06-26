@@ -38,6 +38,8 @@ interface AdminPanelProps {
   categories: string[];
   setCategories: React.Dispatch<React.SetStateAction<string[]>>;
   onClose: () => void;
+  isAdminAuthenticated: boolean;
+  setIsAdminAuthenticated: (val: boolean) => void;
 }
 
 export default function AdminPanel({
@@ -47,6 +49,8 @@ export default function AdminPanel({
   categories,
   setCategories,
   onClose,
+  isAdminAuthenticated,
+  setIsAdminAuthenticated,
 }: AdminPanelProps) {
   // Form State
   const [formData, setFormData] = useState({
@@ -170,9 +174,6 @@ export default function AdminPanel({
   };
 
   // Admin Authentication Session State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem("cyber_admin_auth") === "true";
-  });
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
@@ -183,8 +184,7 @@ export default function AdminPanel({
     const normalizedPass = passwordInput.trim();
 
     if (normalizedUser === "rajibgyt" && normalizedPass === "Bl4ze!Hunter$55") {
-      sessionStorage.setItem("cyber_admin_auth", "true");
-      setIsAuthenticated(true);
+      setIsAdminAuthenticated(true);
       setAuthError("");
       showToast("🔐 ACCESS GRANTED: Admin session initialized.");
     } else {
@@ -194,8 +194,7 @@ export default function AdminPanel({
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem("cyber_admin_auth");
-    setIsAuthenticated(false);
+    setIsAdminAuthenticated(false);
     setUsernameInput("");
     setPasswordInput("");
     showToast("🔓 LOCKED: Admin session terminated.");
@@ -524,7 +523,7 @@ export default function AdminPanel({
   const totalAudience = streams.reduce((sum, s) => sum + (s.status === "Live" ? s.viewers : 0), 0);
   const featuredMatch = streams.find((s) => s.isMatchOfTheDay)?.title || "None Pinned";
 
-  if (!isAuthenticated) {
+  if (!isAdminAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] px-4 py-8 animate-fade-in font-sans">
         

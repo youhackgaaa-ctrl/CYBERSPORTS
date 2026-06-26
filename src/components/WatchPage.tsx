@@ -126,6 +126,7 @@ interface WatchPageProps {
   favorites: string[];
   onToggleFavorite: (id: string, e: React.MouseEvent) => void;
   onBack: () => void;
+  isAdmin?: boolean;
 }
 
 export default function WatchPage({
@@ -134,6 +135,7 @@ export default function WatchPage({
   favorites,
   onToggleFavorite,
   onBack,
+  isAdmin = false,
 }: WatchPageProps) {
   const [activeId, setActiveId] = useState(initialStreamId);
   const [customUrl, setCustomUrl] = useState("");
@@ -796,33 +798,35 @@ export default function WatchPage({
       {/* Sidebar Switcher (Right Column on XL) */}
         {!isLocalFullscreen && (
           <div className="xl:col-span-1 space-y-6">
-            {/* Play Custom URL Panel */}
-            <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-5 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-4 h-4 text-neon-green" />
-                <h3 className="font-display font-bold text-sm text-white uppercase tracking-tight">Direct Link Uplink</h3>
-              </div>
-              <form onSubmit={handlePlayCustomUrl} className="space-y-3">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={customUrl}
-                    onChange={(e) => setCustomUrl(e.target.value)}
-                    placeholder="Paste .m3u8 or video link..."
-                    className="w-full bg-[#07080B] border border-[#1E2230] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-neon-cyan/50 transition-all font-mono"
-                  />
+            {/* Play Custom URL Panel - ADMIN ONLY */}
+            {isAdmin && (
+              <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-5 shadow-xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="w-4 h-4 text-neon-green" />
+                  <h3 className="font-display font-bold text-sm text-white uppercase tracking-tight">Direct Link Uplink</h3>
                 </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-neon-cyan text-black font-mono text-[10px] font-bold rounded-xl hover:bg-white transition-all uppercase tracking-widest"
-                >
-                  Switch to Custom
-                </button>
-              </form>
-              <p className="mt-3 text-[9px] text-gray-500 font-mono uppercase tracking-tighter leading-relaxed">
-                Enter any valid HLS stream link or direct video URL to override the current frequency.
-              </p>
-            </div>
+                <form onSubmit={handlePlayCustomUrl} className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customUrl}
+                      onChange={(e) => setCustomUrl(e.target.value)}
+                      placeholder="Paste .m3u8 or video link..."
+                      className="w-full bg-[#07080B] border border-[#1E2230] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-neon-cyan/50 transition-all font-mono"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-neon-cyan text-black font-mono text-[10px] font-bold rounded-xl hover:bg-white transition-all uppercase tracking-widest"
+                  >
+                    Switch to Custom
+                  </button>
+                </form>
+                <p className="mt-3 text-[9px] text-gray-500 font-mono uppercase tracking-tighter leading-relaxed">
+                  Enter any valid HLS stream link or direct video URL to override the current frequency.
+                </p>
+              </div>
+            )}
 
             {/* Quick Switch Arena Grid */}
             <div className="bg-[#12141C] border border-[#1E2230] rounded-2xl p-5 shadow-xl flex flex-col h-[500px]">

@@ -81,6 +81,16 @@ export default function App() {
   // Mobile sidebar open state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
+  // Admin Authentication State
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem("cyber_admin_auth") === "true";
+  });
+
+  // Sync admin auth to localStorage
+  useEffect(() => {
+    localStorage.setItem("cyber_admin_auth", isAdminAuthenticated.toString());
+  }, [isAdminAuthenticated]);
+
   // Dynamic categories state (Now backed by Firestore)
   const [categories, setCategories] = useState<string[]>(["Football", "Cricket", "Basketball", "TV Channel"]);
 
@@ -459,6 +469,7 @@ export default function App() {
                   favorites={favorites}
                   onToggleFavorite={handleToggleFavorite}
                   onBack={() => setCurrentView({ type: "dashboard" })}
+                  isAdmin={isAdminAuthenticated}
                 />
               </motion.div>
             )}
@@ -498,6 +509,8 @@ export default function App() {
                   categories={categories}
                   setCategories={setCategories}
                   onClose={() => setCurrentView({ type: "dashboard" })}
+                  isAdminAuthenticated={isAdminAuthenticated}
+                  setIsAdminAuthenticated={setIsAdminAuthenticated}
                 />
               </motion.div>
             )}
